@@ -1,23 +1,19 @@
-// v65: 描画・移動が共用する床定義の一貫性チェック
+// v66.0: one shared floor/cutout definition drives rendering and movement surfaces.
 'use strict';
-const assert=require('assert');
 const Shared=require('../public/shared.js');
+let fails=0;function check(n,ok){console.log((ok?'PASS ':'FAIL ')+n);if(!ok)fails++;}
 const areas=Shared.ROGUE_WALK_AREAS;
-const ramps=areas.filter(a=>a.type==='segment'&&Math.abs((a.yB||0)-(a.yA||0))>1e-5);
-assert.equal(ramps.length,1,'the new dungeon should have one and only one height-changing ramp');
-const ramp=ramps[0];
-assert.equal(ramp.az,-103);assert.equal(ramp.bz,-121);assert.equal(ramp.width,12);
-for(let i=0;i<=18;i++){
-  const z=-103-i;
-  const c=Shared.getRogueDungeonFloorCandidates(0,z,3);
-  assert(c.length>0,`main path must have a floor candidate at z=${z}`);
-  assert(Shared.isRogueDungeonWalkable(0,z,3),`main path must be walkable at z=${z}`);
-}
-assert(Shared.getRogueDungeonFloorCandidates(8,-83,3).length>0,'the former ravine must be continuous floor');
-assert(Shared.isRogueDungeonWalkable(0,-56,0)===false,'first closed gate blocks path');
-assert(Shared.isRogueDungeonWalkable(0,-56,1)===true,'first gate opens after stage 0');
-assert(Shared.isRogueDungeonWalkable(0,-100,1)===false,'second closed gate blocks path');
-assert(Shared.isRogueDungeonWalkable(0,-100,2)===true,'second gate opens after stage 1');
-assert(Shared.isRogueDungeonWalkable(0,-158,2)===false,'third closed gate blocks path');
-assert(Shared.isRogueDungeonWalkable(0,-158,3)===true,'third gate opens after stage 2');
-console.log('PASS unified floor surfaces and gate connectivity');
+const central=areas.find(a=>a.type==='ellipse'&&a.x===0&&a.z===-83);
+const lower=areas.find(a=>a.type==='ellipse'&&a.x===0&&a.z===-137);
+check('central ravine and two ramp cutouts are stored with the room floor',!!central&&central.floorHoles?.length===3);
+check('deep ramp cutout is stored with its room floor',!!lower&&lower.floorHoles?.some(h=>h.type==='corridor'&&h.az===-152));
+check('visible central bridge resolves to a real bridge surface',Shared.getRogueDungeonFloorCandidates(0,-83,3).some(s=>s.id==='bridge:main'&&s.y===0));
+check('visible eastern bridge resolves to a real bridge surface',Shared.getRogueDungeonFloorCandidates(15,-83,3).some(s=>s.id==='bridge:east'&&s.y===0));
+check('unbridged part of the ravine has no floor candidate',Shared.getRogueDungeonFloorCandidates(8,-83,3).length===0&&!Shared.isRogueDungeonWalkable(8,-83,3));
+check('side branch cutout does not invent an upper-room floor',!Shared.getRogueDungeonFloorCandidates(18,-92,3).some(s=>s.id==='ellipse:4'));
+check('ramp itself remains a physical floor surface',Shared.getRogueDungeonFloorCandidates(22.5,-92.5,3).some(s=>s.kind==='ramp'));
+check('deep ramp cutout does not retain the floor above it',!Shared.getRogueDungeonFloorCandidates(0,-160,3).some(s=>s.id==='ellipse:10'));
+check('deep ramp itself remains a physical floor surface',Shared.getRogueDungeonFloorCandidates(0,-160,3).some(s=>s.kind==='ramp'));
+check('segment candidates are constrained to the actual rectangle length',Shared.getRogueDungeonFloorCandidates(0,-120.8,3).some(s=>s.kind==='ramp')===true && Shared.getRogueDungeonFloorCandidates(0,-124.5,3).some(s=>s.kind==='ramp')===false);
+check('closed gate still blocks floor access',!Shared.isRogueDungeonWalkable(0,-52,0)&&Shared.isRogueDungeonWalkable(0,-52,1));
+if(fails){console.error(`${fails} floor-surface checks failed`);process.exit(1);}console.log('ALL PASSED');

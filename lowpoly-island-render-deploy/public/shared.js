@@ -163,41 +163,57 @@
   const CAVE_SITES = [
     { x: 160,  z: -70,  dirX: 0,  dirZ: 1 },
     { x: -150, z: -195, dirX: -1, dirZ: 0 },
-    // v65: 洞窟とは別系統の、広い一本道と緩い坂を備えたローグライク遺跡入口。
-    { x: -68, z: 145, dirX: 0, dirZ: 1, rogue: true },
+    // v60: 洞窟とは別系統の、上下層と分岐を備えた深層ローグライク遺跡入口。
+    { x: -68, z: 145, dirX: 0, dirZ: 1, rogue: true, rogueVariant: 'classic' },
+    // v66: 独立した試作ダンジョン入口。旧遺跡とは別のインスタンス/地形定義を使う。
+    { x: 112, z: 156, dirX: 0, dirZ: 1, rogue: true, rogueVariant: 'linear' },
   ];
-  const ROGUE_DUNGEON_INDEX = CAVE_SITES.findIndex(site => site.rogue === true);
+  const ROGUE_DUNGEON_INDEX = CAVE_SITES.findIndex(site => site.rogue === true && site.rogueVariant !== 'linear');
+  const ROGUE_LINEAR_DUNGEON_INDEX = CAVE_SITES.findIndex(site => site.rogueVariant === 'linear');
+  const isRogueDungeonIndex = index => Number.isInteger(index) && !!(CAVE_SITES[index] && CAVE_SITES[index].rogue === true);
+  const getRogueDungeonVariant = index => CAVE_SITES[index] && CAVE_SITES[index].rogueVariant === 'linear' ? 'linear' : 'classic';
   // ダンジョン地形の唯一の定義。サーバーAIとクライアント描画/歩行判定で共用する。
   const ROGUE_WALK_AREAS = [
-    // v65: 一本道のブロックアウト。床・通路・移動判定はこの定義を共用する。
-    {type:'ellipse', x:0, z:12, rx:19, rz:16, floorY:0, floorHoles:[
-      {type:'corridor',ax:0,az:1,bx:0,bz:-24,width:12,extendStart:.5,extendEnd:.5}
+    {type:'ellipse', x:0, z:12, rx:19, rz:16, floorY:0},
+    {type:'segment', ax:0, az:1, bx:0, bz:-24, width:11, yA:0, yB:0},
+    {type:'ellipse', x:0, z:-37, rx:23, rz:16, floorY:0},
+    {type:'segment', ax:0, az:-49, bx:0, bz:-63, width:10, yA:0, yB:0},
+    {type:'ellipse', x:0, z:-83, rx:36, rz:25, floorY:0, floorHoles:[
+      {type:'ellipse',x:0,z:-83,rx:35.5,rz:4.55},
+      {type:'corridor',ax:15,az:-90,bx:30,bz:-95,width:9.2,extendStart:.6,extendEnd:5.2},
+      {type:'corridor',ax:0,az:-103,bx:0,bz:-121,width:10.8,extendStart:.5,extendEnd:6.8}
     ]},
-    {type:'segment', ax:0, az:1, bx:0, bz:-24, width:12, yA:0, yB:0},
-    {type:'ellipse', x:0, z:-37, rx:23, rz:16, floorY:0, floorHoles:[
-      {type:'corridor',ax:0,az:1,bx:0,bz:-24,width:12,extendStart:.5,extendEnd:.5},
-      {type:'corridor',ax:0,az:-49,bx:0,bz:-63,width:12,extendStart:.5,extendEnd:.5}
+    {type:'segment', ax:-14, az:-78, bx:-29, bz:-69, width:8.5, yA:0, yB:3.8},
+    {type:'ellipse', x:-42, z:-66, rx:15, rz:13, floorY:3.8},
+    {type:'segment', ax:15, az:-90, bx:30, bz:-95, width:8.5, yA:0, yB:-2.6},
+    {type:'ellipse', x:44, z:-97, rx:16, rz:14, floorY:-2.6},
+    {type:'segment', ax:0, az:-103, bx:0, bz:-121, width:10, yA:0, yB:-1.4},
+    {type:'ellipse', x:0, z:-137, rx:27, rz:18, floorY:-1.4, floorHoles:[
+      {type:'corridor',ax:0,az:-152,bx:0,bz:-166,width:10.8,extendStart:.5,extendEnd:4.0}
     ]},
-    {type:'segment', ax:0, az:-49, bx:0, bz:-70, width:12, yA:0, yB:0},
-    {type:'ellipse', x:0, z:-83, rx:36, rz:16, floorY:0, floorHoles:[
-      {type:'corridor',ax:0,az:-49,bx:0,bz:-70,width:12,extendStart:.5,extendEnd:.5},
-      {type:'corridor',ax:0,az:-97,bx:0,bz:-121,width:12,extendStart:.2,extendEnd:3.0}
-    ]},
-    // ゲート前の短い平坦区間。広間の外に門を置き、横から迂回できない接続路にする。
-    {type:'segment', ax:0, az:-97, bx:0, bz:-103, width:12, yA:0, yB:0},
-    // 唯一の坂。中央広間から後方の部屋へ、幅12mで0mから-1.2mへ緩やかに下降する。
-    {type:'segment', ax:0, az:-103, bx:0, bz:-121, width:12, yA:0, yB:-1.2},
-    {type:'ellipse', x:0, z:-137, rx:27, rz:18, floorY:-1.2, floorHoles:[
-      {type:'corridor',ax:0,az:-97,bx:0,bz:-121,width:12,extendStart:.2,extendEnd:3.0},
-      {type:'corridor',ax:0,az:-152,bx:0,bz:-166,width:12,extendStart:.5,extendEnd:1.0}
-    ]},
-    {type:'segment', ax:0, az:-152, bx:0, bz:-166, width:12, yA:-1.2, yB:-1.2},
-    {type:'ellipse', x:0, z:-184, rx:35, rz:20, floorY:-1.2, floorHoles:[
-      {type:'corridor',ax:0,az:-152,bx:0,bz:-166,width:12,extendStart:.5,extendEnd:1.0}
-    ]},
+    {type:'segment', ax:0, az:-152, bx:0, bz:-166, width:10, yA:-1.4, yB:-5.2},
+    {type:'ellipse', x:0, z:-184, rx:35, rz:24, floorY:-5.2},
   ];
-  // 門は各戦闘区画の出口に配置し、坂や床の継ぎ目の途中には置かない。
-  const ROGUE_GATE_Z = [-56, -100, -158];
+  const ROGUE_GATE_Z = [-52, -110, -158];
+  // v66: 独立した一本道ダンジョン用の床定義。旧遺跡の地形には触れない。
+  const ROGUE_LINEAR_WALK_AREAS = [
+    {type:'ellipse', x:0, z:12, rx:19, rz:16, floorY:0, floorHoles:[{type:'corridor',ax:0,az:1,bx:0,bz:-24,width:12}]},
+    {type:'segment', ax:0, az:1, bx:0, bz:-24, width:12, yA:0, yB:0},
+    {type:'ellipse', x:0, z:-37, rx:23, rz:16, floorY:0, floorHoles:[{type:'corridor',ax:0,az:1,bx:0,bz:-24,width:12},{type:'corridor',ax:0,az:-49,bx:0,bz:-70,width:12}]},
+    {type:'segment', ax:0, az:-49, bx:0, bz:-70, width:12, yA:0, yB:0},
+    {type:'ellipse', x:0, z:-83, rx:36, rz:16, floorY:0, floorHoles:[{type:'corridor',ax:0,az:-49,bx:0,bz:-70,width:12},{type:'corridor',ax:0,az:-97,bx:0,bz:-121,width:12}]},
+    {type:'segment', ax:0, az:-97, bx:0, bz:-103, width:12, yA:0, yB:0},
+    {type:'segment', ax:0, az:-103, bx:0, bz:-121, width:12, yA:0, yB:-1.2},
+    {type:'ellipse', x:0, z:-137, rx:27, rz:18, floorY:-1.2, floorHoles:[{type:'corridor',ax:0,az:-97,bx:0,bz:-121,width:12},{type:'corridor',ax:0,az:-152,bx:0,bz:-166,width:12}]},
+    {type:'segment', ax:0, az:-152, bx:0, bz:-166, width:12, yA:-1.2, yB:-1.2},
+    {type:'ellipse', x:0, z:-184, rx:35, rz:20, floorY:-1.2, floorHoles:[{type:'corridor',ax:0,az:-152,bx:0,bz:-166,width:12}]},
+  ];
+  const ROGUE_LINEAR_GATE_Z = [-56, -100, -158];
+  function getRogueDungeonDefinition(variant='classic') {
+    return variant === 'linear'
+      ? { areas:ROGUE_LINEAR_WALK_AREAS, gates:ROGUE_LINEAR_GATE_Z }
+      : { areas:ROGUE_WALK_AREAS, gates:ROGUE_GATE_Z };
+  }
   function roguePointSegmentDistance2D(x,z,ax,az,bx,bz){
     const dx=bx-ax,dz=bz-az,len2=dx*dx+dz*dz;
     const t=len2>1e-8?Math.max(0,Math.min(1,((x-ax)*dx+(z-az)*dz)/len2)):0;
@@ -237,13 +253,20 @@
     }
     return false;
   }
-  function getRogueDungeonFloorCandidates(x,z,openGates=0){
+  function getRogueDungeonFloorCandidates(x,z,openGates=0,variant='classic'){
     if(!Number.isFinite(x)||!Number.isFinite(z))return [];
-    const gates=Math.max(0,Math.min(ROGUE_GATE_Z.length,Math.floor(Number(openGates)||0)));
-    for(let i=gates;i<ROGUE_GATE_Z.length;i++)if(Math.abs(z-ROGUE_GATE_Z[i])<1.05&&Math.abs(x)<5.5)return [];
+    const def=getRogueDungeonDefinition(variant), areas=def.areas, gateZ=def.gates;
+    const gates=Math.max(0,Math.min(gateZ.length,Math.floor(Number(openGates)||0)));
+    for(let i=gates;i<gateZ.length;i++)if(Math.abs(z-gateZ[i])<1.05&&Math.abs(x)<5.5)return [];
+    // 旧遺跡の裂け目だけは、実際の橋の板の位置を使う。
+    if(variant!=='linear'&&Math.abs(z+83)<4.55&&Math.abs(x)<38){
+      if(Math.abs(x)<1.48)return [{id:'bridge:main',kind:'bridge',y:0,t:null,d:0,area:null}];
+      if(Math.abs(x-15)<1.10)return [{id:'bridge:east',kind:'bridge',y:0,t:null,d:0,area:null}];
+      return [];
+    }
     const result=[];
-    for(let i=0;i<ROGUE_WALK_AREAS.length;i++){
-      const a=ROGUE_WALK_AREAS[i];
+    for(let i=0;i<areas.length;i++){
+      const a=areas[i];
       if(a.type==='segment'){
         const dx=a.bx-a.ax,dz=a.bz-a.az,len=Math.hypot(dx,dz);
         if(len<1e-6)continue;
@@ -252,24 +275,22 @@
         if(along< -1e-6||along>len+1e-6||Math.abs(lateral)>a.width*.45+1e-6)continue;
         const t=Math.max(0,Math.min(1,along/len));
         const y=(a.yA||0)+((a.yB||0)-(a.yA||0))*t;
-        result.push({id:`segment:${i}`,kind:Math.abs((a.yB||0)-(a.yA||0))>1e-5?'ramp':'segment',y,t,d:Math.abs(lateral),area:a});
+        result.push({id:`${variant}:segment:${i}`,kind:Math.abs((a.yB||0)-(a.yA||0))>1e-5?'ramp':'segment',y,t,d:Math.abs(lateral),area:a});
       }else if(a.type==='ellipse'){
-        // Match the rendered floor polygon (max radial jag is about 1%); keep
-        // all real overlapping floors, but never include an area cut out of its mesh.
         const metric=((x-a.x)/a.rx)**2+((z-a.z)/a.rz)**2;
-        if(metric<=1.021&&!rogueFloorHoleContainsPoint(a,x,z))result.push({id:`ellipse:${i}`,kind:'ellipse',y:Number.isFinite(a.floorY)?a.floorY:0,metric,area:a});
+        if(metric<=1.021&&!rogueFloorHoleContainsPoint(a,x,z))result.push({id:`${variant}:ellipse:${i}`,kind:'ellipse',y:Number.isFinite(a.floorY)?a.floorY:0,metric,area:a});
       }
     }
     return result;
   }
-  function isRogueDungeonWalkable(x,z,openGates=0){
+  function isRogueDungeonWalkable(x,z,openGates=0,variant='classic'){
     if(!Number.isFinite(x)||!Number.isFinite(z))return false;
-    const gates=Math.max(0,Math.min(ROGUE_GATE_Z.length,Math.floor(Number(openGates)||0)));
-    for(let i=gates;i<ROGUE_GATE_Z.length;i++)if(Math.abs(z-ROGUE_GATE_Z[i])<1.05&&Math.abs(x)<5.5)return false;
-    return ROGUE_WALK_AREAS.some(a=>{
+    const def=getRogueDungeonDefinition(variant), areas=def.areas, gateZ=def.gates;
+    const gates=Math.max(0,Math.min(gateZ.length,Math.floor(Number(openGates)||0)));
+    for(let i=gates;i<gateZ.length;i++)if(Math.abs(z-gateZ[i])<1.05&&Math.abs(x)<5.5)return false;
+    if(variant!=='linear'&&Math.abs(z+83)<4.55&&Math.abs(x)<38)return Math.abs(x)<1.48||Math.abs(x-15)<1.10;
+    return areas.some(a=>{
       if(a.type==='ellipse')return rogueAreaWalkableContains(a,x,z);
-      // Keep a small capsule-like nav tolerance at corridor endpoints for route finding.
-      // Player collision still requires an actual floor candidate, so this does not create fake ground.
       return a.type==='segment'&&roguePointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz)<=a.width*.45;
     });
   }
@@ -277,9 +298,9 @@
   // 斜面通路の側壁は見た目だけのメッシュなので、側面から坂へ乗り上げる侵入だけを止める。
   // 坂の内側から外側の歩行可能な地面へ降りる移動は妨げない。
   // 端から通路方向へ入る通常の移動や、通路内を進む動きも維持する。
-  function isRogueRampSideEntryBlocked(fromX,fromZ,toX,toZ){
+  function isRogueRampSideEntryBlocked(fromX,fromZ,toX,toZ,variant='classic'){
     if(![fromX,fromZ,toX,toZ].every(Number.isFinite))return false;
-    for(const a of ROGUE_WALK_AREAS){
+    for(const a of getRogueDungeonDefinition(variant).areas){
       if(a.type!=='segment'||Math.abs((a.yB||0)-(a.yA||0))<1e-5)continue;
       const dx=a.bx-a.ax,dz=a.bz-a.az,len2=dx*dx+dz*dz;
       const len=Math.sqrt(len2);
@@ -309,18 +330,20 @@
     return false;
   }
 
-  // 粗いグリッド経路探索。細い主橋も通れるように2.5m間隔で、地形定義と同じ歩行判定を使う。
-  const ROGUE_NAV = (()=>{
-    const minX=-100,minZ=-220,step=2.5,nx=81,nz=97,walkable=new Uint8Array(nx*nz);
+  // 粗いグリッド経路探索。地形ごとに独立したキャッシュを持つ。
+  const ROGUE_NAVS = new Map();
+  function getRogueNav(variant='classic'){
+    if(ROGUE_NAVS.has(variant))return ROGUE_NAVS.get(variant);
+    const def=getRogueDungeonDefinition(variant),minX=-100,minZ=-220,step=2.5,nx=81,nz=97,walkable=new Uint8Array(nx*nz);
     const id=(ix,iz)=>ix*nz+iz;
     for(let ix=0;ix<nx;ix++)for(let iz=0;iz<nz;iz++){
       const x=minX+ix*step,z=minZ+iz*step;
-      if(isRogueDungeonWalkable(x,z,ROGUE_GATE_Z.length))walkable[id(ix,iz)]=1;
+      if(isRogueDungeonWalkable(x,z,def.gates.length,variant))walkable[id(ix,iz)]=1;
     }
-    return {minX,minZ,step,nx,nz,count:nx*nz,walkable,id};
-  })();
-  function rogueNearestNavNode(x,z,openGates){
-    const g=ROGUE_NAV,ix0=Math.max(0,Math.min(g.nx-1,Math.round((x-g.minX)/g.step))),iz0=Math.max(0,Math.min(g.nz-1,Math.round((z-g.minZ)/g.step)));
+    const grid={minX,minZ,step,nx,nz,count:nx*nz,walkable,id};ROGUE_NAVS.set(variant,grid);return grid;
+  }
+  function rogueNearestNavNode(x,z,openGates,variant='classic'){
+    const g=getRogueNav(variant),ix0=Math.max(0,Math.min(g.nx-1,Math.round((x-g.minX)/g.step))),iz0=Math.max(0,Math.min(g.nz-1,Math.round((z-g.minZ)/g.step)));
     let best=-1,bestD=Infinity;
     for(let r=0;r<=7&&best<0;r++){
       for(let dx=-r;dx<=r;dx++)for(let dz=-r;dz<=r;dz++){
@@ -328,20 +351,17 @@
         const ix=ix0+dx,iz=iz0+dz;if(ix<0||ix>=g.nx||iz<0||iz>=g.nz)continue;
         const nid=g.id(ix,iz);if(!g.walkable[nid])continue;
         const nx=g.minX+ix*g.step,nz=g.minZ+iz*g.step;
-        if(!isRogueDungeonWalkable(nx,nz,openGates))continue;
+        if(!isRogueDungeonWalkable(nx,nz,openGates,variant))continue;
         const d=(nx-x)**2+(nz-z)**2;if(d<bestD){bestD=d;best=nid;}
       }
       if(best>=0)return best;
     }
     return -1;
   }
-  function findRogueDungeonPath(fromX,fromZ,toX,toZ,openGates){
-    const g=ROGUE_NAV,start=rogueNearestNavNode(fromX,fromZ,openGates),goal=rogueNearestNavNode(toX,toZ,openGates);
+  function findRogueDungeonPath(fromX,fromZ,toX,toZ,openGates,variant='classic'){
+    const g=getRogueNav(variant),start=rogueNearestNavNode(fromX,fromZ,openGates,variant),goal=rogueNearestNavNode(toX,toZ,openGates,variant);
     if(start<0||goal<0)return [];
-    if(start===goal){
-      // 同じ粗いグリッドセル内にいる敵とプレイヤーは、障害物を横切らない短い直線で接近する。
-      return isRogueDungeonWalkable((fromX+toX)*.5,(fromZ+toZ)*.5,openGates)?[{x:toX,z:toZ}]:[];
-    }
+    if(start===goal)return isRogueDungeonWalkable((fromX+toX)*.5,(fromZ+toZ)*.5,openGates,variant)?[{x:toX,z:toZ}]:[];
     const parent=new Int32Array(g.count);parent.fill(-2);parent[start]=-1;
     const queue=new Int32Array(g.count);let head=0,tail=0;queue[tail++]=start;
     const dirs=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
@@ -351,8 +371,8 @@
         const nxI=ix+dx,nzI=iz+dz;if(nxI<0||nxI>=g.nx||nzI<0||nzI>=g.nz)continue;
         const next=g.id(nxI,nzI);if(parent[next]!==-2||!g.walkable[next])continue;
         const nx=g.minX+nxI*g.step,nz=g.minZ+nzI*g.step;
-        if(!isRogueDungeonWalkable(nx,nz,openGates)||!isRogueDungeonWalkable((cx+nx)*.5,(cz+nz)*.5,openGates))continue;
-        if(dx&&dz&&(!isRogueDungeonWalkable(cx+dx*g.step,cz,openGates)||!isRogueDungeonWalkable(cx,cz+dz*g.step,openGates)))continue;
+        if(!isRogueDungeonWalkable(nx,nz,openGates,variant)||!isRogueDungeonWalkable((cx+nx)*.5,(cz+nz)*.5,openGates,variant))continue;
+        if(dx&&dz&&(!isRogueDungeonWalkable(cx+dx*g.step,cz,openGates,variant)||!isRogueDungeonWalkable(cx,cz+dz*g.step,openGates,variant)))continue;
         parent[next]=cur;queue[tail++]=next;
       }
     }
@@ -381,59 +401,64 @@
   // 出現地点が床のない裂け目や縮小した歩行境界へ入らないようにする。
   // 通常の指定点はそのまま使い、無効な点だけ近傍の有効床へ移す。
   // 位置はseedから決定した後に探索するため、サーバーと全クライアントで一致する。
-  function resolveRogueDungeonSpawn(x,z,stage=0) {
-    if (isRogueDungeonWalkable(x,z,ROGUE_GATE_Z.length)) return {x,z};
-    const anchors=stage<=0?[[0,-37]]:stage===1?[[0,-83]]:stage===2?[[0,-137]]:[[0,-184]];
+  function resolveRogueDungeonSpawn(x,z,stage=0,variant='classic') {
+    const def=getRogueDungeonDefinition(variant);
+    if (isRogueDungeonWalkable(x,z,def.gates.length,variant)) return {x,z};
+    const anchors=variant==='linear'
+      ? (stage<=0?[[0,-37]]:stage===1?[[0,-83]]:stage===2?[[0,-137]]:[[0,-184]])
+      : (stage<=0?[[0,-37]]:stage===1?[[0,-83]]:stage===2?[[0,-137]]:[[0,-184]]);
     for(let radius=.5;radius<=18;radius+=.5){
       const steps=Math.max(24,Math.ceil(Math.PI*2*radius/.65));
       for(let i=0;i<steps;i++){
         const a=(i/steps)*Math.PI*2;
         const sx=Math.round((x+Math.cos(a)*radius)*4)/4;
         const sz=Math.round((z+Math.sin(a)*radius)*4)/4;
-        if(!isRogueDungeonWalkable(sx,sz,ROGUE_GATE_Z.length))continue;
-        // スポーン地点は床上であるだけでなく、開門後に本線から到達できる場所に限定する。
-        if(!anchors.some(([ax,az])=>Math.hypot(sx-ax,sz-az)<1.1||findRogueDungeonPath(ax,az,sx,sz,ROGUE_GATE_Z.length).length>0))continue;
+        if(!isRogueDungeonWalkable(sx,sz,def.gates.length,variant))continue;
+        if(!anchors.some(([ax,az])=>Math.hypot(sx-ax,sz-az)<1.1||findRogueDungeonPath(ax,az,sx,sz,def.gates.length,variant).length>0))continue;
         return {x:sx,z:sz};
       }
     }
-    // 最終フォールバックも、定義済みの安全な広間中心へ戻す。
-    const [fx,fz]=anchors[0];
-    return {x:fx,z:fz};
+    const [fx,fz]=anchors[0];return {x:fx,z:fz};
   }
 
   // ローグライク遺跡の区画配置。全クライアントとサーバーが同じseedから同じ配置を再現する。
   // 近接・高速接近・遠距離・重装・突進の役割を段階ごとに導入する。
-  function getRogueDungeonLayout(seed) {
+  function getRogueDungeonLayout(seed,variant='classic') {
     seed = (Number.isInteger(seed) ? seed : 1) >>> 0;
-    const random = mulberry32((seed ^ 0x6d2b79f5) >>> 0);
+    const random = mulberry32((seed ^ (variant==='linear'?0x1a66c0de:0x6d2b79f5)) >>> 0);
     const enemies = [];
-    const packs = [
+    const packs = variant==='linear' ? [
+      { stage:0, kind:'shade', spots:[[-3,-31],[3,-33],[-2,-42],[2,-43]] },
+      { stage:1, kind:'crawler', spots:[[-3,-75],[3,-78],[0,-92]] },
+      { stage:1, kind:'spitter', spots:[[-2,-86],[2,-91]] },
+      { stage:2, kind:'sentinel', spots:[[-3,-132],[3,-132],[-2,-142],[2,-144]] },
+      { stage:2, kind:'charger', spots:[[-3,-139],[3,-141]] }
+    ] : [
       { stage:0, kind:'shade', spots:[[-8,-31],[8,-33],[-3,-42],[5,-43]] },
-      { stage:1, kind:'crawler', spots:[[-9,-75],[8,-74],[0,-93]], optionalSpots:[[-27,-82],[27,-94]] },
-      { stage:1, kind:'spitter', spots:[[-22,-74],[24,-92]], optionalSpots:[[25,-92]] },
+      { stage:1, kind:'crawler', spots:[[-9,-75],[8,-74],[0,-93]], optionalSpots:[[-42,-65],[43,-95]] },
+      { stage:1, kind:'spitter', spots:[[-22,-74],[24,-92]], optionalSpots:[[40,-100]] },
       { stage:2, kind:'sentinel', spots:[[-10,-132],[10,-132],[-6,-141],[7,-143]], optionalSpots:[[16,-149]] },
       { stage:2, kind:'charger', spots:[[-16,-139],[16,-141]] }
     ];
     for (const pack of packs) {
       const hp=getRogueEnemyProfile(pack.kind,pack.stage).hp;
       for (const [x,z] of pack.spots) {
-        const spot=resolveRogueDungeonSpawn(x+(random()-.5)*3.4,z+(random()-.5)*3.4,pack.stage);
+        const spot=resolveRogueDungeonSpawn(x+(random()-.5)*3.4,z+(random()-.5)*3.4,pack.stage,variant);
         enemies.push({id:`e${enemies.length}`,kind:pack.kind,...spot,hp,stage:pack.stage,boss:false,optional:false});
       }
       for (const [x,z] of (pack.optionalSpots||[])) {
-        const spot=resolveRogueDungeonSpawn(x+(random()-.5)*2.2,z+(random()-.5)*2.2,pack.stage);
+        const spot=resolveRogueDungeonSpawn(x+(random()-.5)*2.2,z+(random()-.5)*2.2,pack.stage,variant);
         enemies.push({id:`e${enemies.length}`,kind:pack.kind,...spot,hp,stage:pack.stage,boss:false,optional:true});
       }
     }
-    const baseChests=[[-8,-39,0],[-23,-78,1],[23,-91,1],[-14,-137,2],[7,-145,2]];
+    const baseChests=variant==='linear' ? [[-5,-39,0],[5,-76,1],[-5,-91,1],[-5,-137,2],[5,-145,2]] : [[-8,-39,0],[-45,-68,1],[48,-98,1],[-14,-137,2],[7,-145,2]];
     const chests=baseChests.map(([x,z,stage])=>resolveRogueDungeonSpawn(
-      x+(random()-.5)*(stage===1?4.5:3.2),
-      z+(random()-.5)*(stage===1?4.0:3.0),stage
+      x+(random()-.5)*(stage===1?2.2:2.0),z+(random()-.5)*(stage===1?3.0:2.0),stage,variant
     )).map((spot,i)=>({ ...spot,stage:baseChests[i][2] }));
     const bossProfile=getRogueEnemyProfile('sentinel',3,true);
-    const bossSpot=resolveRogueDungeonSpawn(0,-184,3);
+    const bossSpot=resolveRogueDungeonSpawn(0,-184,3,variant);
     const boss={id:'boss',kind:'sentinel',...bossSpot,hp:bossProfile.hp,stage:3,boss:true,optional:false};
-    return {seed,enemies,chests,boss};
+    return {seed,enemies,chests,boss,variant};
   }
 
   function getRogueChestReward(seed, index) {
@@ -1507,10 +1532,11 @@
 
   function isValidCavePosition(cave, x, z) {
     if (cave < 0) return true;
-    if (cave === ROGUE_DUNGEON_INDEX) {
+    if (isRogueDungeonIndex(cave)) {
       // 広域境界に加え、サーバーでも共有地形の床・橋の上にいることを検証する。
       // 門の開閉はrun進行側で管理するため、ここでは全門開放状態で床形状だけを検証。
-      return Math.abs(x) <= 105 + CAVE_POSITION_TOLERANCE && z >= -226 - CAVE_POSITION_TOLERANCE && z <= 27 + CAVE_POSITION_TOLERANCE && isRogueDungeonWalkable(x,z,ROGUE_GATE_Z.length);
+      const variant=getRogueDungeonVariant(cave), def=getRogueDungeonDefinition(variant);
+      return Math.abs(x) <= 105 + CAVE_POSITION_TOLERANCE && z >= -226 - CAVE_POSITION_TOLERANCE && z <= 27 + CAVE_POSITION_TOLERANCE && isRogueDungeonWalkable(x,z,def.gates.length,variant);
     }
     return Math.hypot(x, z) <= CAVE_ROOM_RADIUS + CAVE_POSITION_TOLERANCE;
   }
@@ -1535,10 +1561,10 @@
       // ローグライク遺跡では深層の生還門と死亡後の帰還も同じ島側出口へ戻すため、
       // 内部の有効範囲内なら出口座標を検証して退室を許可する。
       // 退室先は指定された入口外の座標に固定し、任意地点へのワープは許可しない。
-      if (fromCave === ROGUE_DUNGEON_INDEX) {
+      if (isRogueDungeonIndex(fromCave)) {
         if (!isValidCavePosition(fromCave, fromX, fromZ)) return false;
         const atMainExit = distanceXZ(fromX, fromZ, CAVE_INTERIOR_EXIT.x, CAVE_INTERIOR_EXIT.z) <= CAVE_TRANSITION_RADIUS;
-        const atExtractionPortal = distanceXZ(fromX, fromZ, 0, -201) <= CAVE_TRANSITION_RADIUS;
+        const atExtractionPortal = distanceXZ(fromX, fromZ, 0, getRogueDungeonVariant(fromCave)==='linear' ? -201 : -201) <= CAVE_TRANSITION_RADIUS;
         // 生還門・通常出口以外からのワープは拒否。死亡後だけは任意の有効な内部位置から帰還可能。
         if (!atMainExit && !atExtractionPortal && !allowDeadExit) return false;
         return distanceXZ(toX, toZ, ex, ez) <= CAVE_EXIT_SPAWN_RADIUS;
@@ -1638,14 +1664,15 @@
     restoreRogueRecoveryState(raw) {
       this.rogueRecoveryStore.clear();
       if (!raw || typeof raw !== 'object' || raw.version !== 1 || !Array.isArray(raw.rooms)) return 0;
-      const validPartyKey = key => typeof key === 'string' && (/^solo:[a-f0-9]{16}$/.test(key) || /^party:[A-Z0-9]{6}$/.test(key));
+      const validPartyKey = key => typeof key === 'string' && /^(?:linear:)?(?:solo:[a-f0-9]{16}|party:[A-Z0-9]{6})$/.test(key);
       let restored = 0;
       for (const source of raw.rooms.slice(0,128)) {
         if (!source || typeof source !== 'object' || !validPartyKey(source.key) || this.rogueRecoveryStore.has(source.key)) continue;
         if (!Number.isInteger(source.seed) || source.seed < 0 || source.seed > 0xffffffff) continue;
         if (!Number.isInteger(source.stage) || source.stage < 0 || source.stage > 4 || !Number.isInteger(source.openGates) || source.openGates < source.stage || source.openGates > 4) continue;
         if (!Array.isArray(source.bags) || source.bags.length < 1 || source.bags.length > 16) continue;
-        const layout = getRogueDungeonLayout(source.seed >>> 0);
+        const dungeonType = source.dungeonType === 'linear' || String(source.key).startsWith('linear:') ? 'linear' : 'classic';
+        const layout = getRogueDungeonLayout(source.seed >>> 0, dungeonType);
         const enemyMax = new Map(layout.enemies.map(e => [e.id, e.hp]));
         enemyMax.set('boss', layout.boss.hp);
         const enemyHp = new Map(enemyMax);
@@ -1661,7 +1688,7 @@
           if (!item || typeof item !== 'object' || typeof item.ownerPid !== 'string' || !/^[a-f0-9]{16}$/.test(item.ownerPid) || bags.has(item.ownerPid)) continue;
           if (typeof item.bagId !== 'string' || !/^[A-Za-z0-9:_-]{1,80}$/.test(item.bagId)) continue;
           const x = Number(item.x), z = Number(item.z), remainingMs = Number(item.remainingMs);
-          if (!Number.isFinite(x) || !Number.isFinite(z) || Math.abs(x) > 110 || z < -235 || z > 15 || !isRogueDungeonWalkable(x,z,source.openGates)) continue;
+          if (!Number.isFinite(x) || !Number.isFinite(z) || Math.abs(x) > 110 || z < -235 || z > 15 || !isRogueDungeonWalkable(x,z,source.openGates,dungeonType)) continue;
           if (!Number.isFinite(remainingMs) || remainingMs <= 0 || remainingMs > 7*60*1000) continue;
           const payload = this.rogueCarryPayload(item.payload);
           if (!this.hasRogueCarry(payload)) continue;
@@ -1674,7 +1701,7 @@
         if (!bags.size) continue;
         const seq = Number.isSafeInteger(source.recoverySeq) && source.recoverySeq >= 1 && source.recoverySeq <= 1000000 ? source.recoverySeq : 1;
         this.rogueRecoveryStore.set(source.key, {
-          key:source.key, seed:source.seed >>> 0, stage:source.stage, openGates:source.openGates,
+          key:source.key, dungeonType, seed:source.seed >>> 0, stage:source.stage, openGates:source.openGates,
           extractReady:source.extractReady === true && source.stage >= 4,
           openedChests:[...openedChests], enemyHp:Object.fromEntries(enemyHp), recoverySeq:seq,
           bags:[...bags.values()]
@@ -1690,7 +1717,7 @@
       for (const room of this.rogueRooms.values()) {
         if (!room || room.recoveryBags.size === 0) { if (room) records.delete(room.key); continue; }
         records.set(room.key, {
-          key:room.key, seed:room.seed, stage:room.stage, openGates:room.openGates,
+          key:room.key, dungeonType:room.dungeonType || 'classic', seed:room.seed, stage:room.stage, openGates:room.openGates,
           extractReady:room.extractReady === true, openedChests:[...room.openedChests],
           enemyHp:Object.fromEntries(room.enemyHp), recoverySeq:room.recoverySeq,
           bags:[...room.recoveryBags.values()].map(bag=>({
@@ -1771,7 +1798,7 @@
         id, name: '', pid: '', joined: false, joinedAt: 0, lastChatAt: 0,
         x: 0, y: 0, z: 6, ry: 0, cave: -1, flags: 0, dead: false,
         hasState: false, lastStateAt: 0, clientTime: null, clientTimeOrigin: null, serverTimeOrigin: null, lastHitAt: new Map(),
-        roguePartyKey: null, rogueRoomKey: null,
+        roguePartyKey: null, rogueRoomKey: null, rogueSelectedVariant: 'classic',
         lastGateToggleAt: 0,
         stuckSince: 0, lastBlockedAt: 0, stuckAnchorX: 0, stuckAnchorZ: 0,
       });
@@ -1801,7 +1828,7 @@
 
     rogueRoomSnapshot(room, clientId) {
       return {
-        t:'rogueRoomJoined', instanceId:room.id, seed:room.seed, partyCode:room.partyCode || '',
+        t:'rogueRoomJoined', instanceId:room.id, seed:room.seed, dungeonType:room.dungeonType || 'classic', partyCode:room.partyCode || '',
         stage:room.stage, openGates:room.openGates, extractReady:room.extractReady,
         openedChests:[...room.openedChests], enemyHp:Object.fromEntries(room.enemyHp),
         enemyPositions:[...room.enemyStates].map(([id,e])=>({id,x:r2(e.x),z:r2(e.z),yaw:r2(e.yaw)})),
@@ -1847,7 +1874,7 @@
       const payload=this.rogueCarryPayload(rawPayload);
       if(!this.hasRogueCarry(payload))return null;
       const x=Number(position && position.x), z=Number(position && position.z);
-      if(!Number.isFinite(x)||!Number.isFinite(z)||!isRogueDungeonWalkable(x,z,room.openGates))return null;
+      if(!Number.isFinite(x)||!Number.isFinite(z)||!isRogueDungeonWalkable(x,z,room.openGates,room.dungeonType))return null;
       const bag={
         bagId:`${room.id}-bag-${room.recoverySeq++}`, ownerPid:owner.pid,
         ownerName:typeof owner.name==='string'&&owner.name?owner.name.slice(0,24):'旅人',
@@ -1875,15 +1902,17 @@
 
     joinRogueRoom(id) {
       const c=this.clients.get(id);
-      if(!c || c.cave!==ROGUE_DUNGEON_INDEX) return;
+      if(!c || !isRogueDungeonIndex(c.cave)) return;
       // 新クライアントはソロまたは6文字のパーティーコードを先に送信する。
       // 古いクライアントは個別ランへ入れ、意図しない全員共有を防ぐ。
-      const partyKey=typeof c.roguePartyKey==='string' && c.roguePartyKey ? c.roguePartyKey : `solo:${c.pid || id}`;
+      const dungeonType=getRogueDungeonVariant(c.cave);
+      const partyKeyBase=typeof c.roguePartyKey==='string' && c.roguePartyKey ? c.roguePartyKey : `solo:${c.pid || id}`;
+      const partyKey=dungeonType==='linear'?`linear:${partyKeyBase}`:partyKeyBase;
       let room=this.rogueRooms.get(partyKey);
       if(!room) {
         const savedRecovery=this.rogueRecoveryStore.get(partyKey)||null;
         const seed=savedRecovery?savedRecovery.seed:(Math.floor(Math.random()*4294967296)>>>0);
-        const layout=getRogueDungeonLayout(seed);
+        const layout=getRogueDungeonLayout(seed,dungeonType);
         const enemyHp=new Map(layout.enemies.map(e=>[e.id,e.hp]));
         enemyHp.set(layout.boss.id,layout.boss.hp);
         if(savedRecovery && savedRecovery.enemyHp && typeof savedRecovery.enemyHp==='object'){
@@ -1892,7 +1921,7 @@
         const initEnemyState=(e,cooldown)=>({x:e.x,z:e.z,homeX:e.x,homeZ:e.z,yaw:0,cooldown,repath:0,path:[],pathIndex:0,targetId:null,attackPulse:0,patrolGoal:null,patrolTimer:0,phase:'idle',windupTimer:0,recoverTimer:0,aimX:e.x,aimZ:e.z,attackRadius:1.5,attackMode:'',chargeDx:0,chargeDz:0,chargeTimer:0,chargeHit:false});
         const enemyStates=new Map(layout.enemies.map(e=>[e.id,initEnemyState(e,0.8+Math.random()*0.9)]));
         enemyStates.set(layout.boss.id,initEnemyState(layout.boss,1.2));
-        room={key:partyKey,id:this.rogueRoomSeq++,seed,partyCode:partyKey.startsWith('party:')?partyKey.slice(6):'',members:new Set(),stage:savedRecovery?savedRecovery.stage:0,openGates:savedRecovery?savedRecovery.openGates:0,extractReady:savedRecovery?savedRecovery.extractReady===true:false,openedChests:new Set(savedRecovery?savedRecovery.openedChests:[]),enemyHp,enemyStates,hitTimes:new Map(),motionTimer:0,recoveryBags:new Map((savedRecovery?savedRecovery.bags:[]).map(bag=>[bag.ownerPid,bag])),memberCarry:new Map(),recoverySeq:savedRecovery?savedRecovery.recoverySeq:1,recoveryStateTimer:0,recoveryTimerActive:false,lastEmptyAt:0};
+        room={key:partyKey,dungeonType,id:this.rogueRoomSeq++,seed,partyCode:partyKeyBase.startsWith('party:')?partyKeyBase.slice(6):'',members:new Set(),stage:savedRecovery?savedRecovery.stage:0,openGates:savedRecovery?savedRecovery.openGates:0,extractReady:savedRecovery?savedRecovery.extractReady===true:false,openedChests:new Set(savedRecovery?savedRecovery.openedChests:[]),enemyHp,enemyStates,hitTimes:new Map(),motionTimer:0,recoveryBags:new Map((savedRecovery?savedRecovery.bags:[]).map(bag=>[bag.ownerPid,bag])),memberCarry:new Map(),recoverySeq:savedRecovery?savedRecovery.recoverySeq:1,recoveryStateTimer:0,recoveryTimerActive:false,lastEmptyAt:0};
         // once activated, the active room becomes the single source of truth for saved recovery data.
         this.rogueRecoveryStore.delete(partyKey);
         this.rogueRooms.set(partyKey,room);
@@ -1926,7 +1955,7 @@
 
     updateRogueRoomProgress(room) {
       while(room.stage<3) {
-        const layout=getRogueDungeonLayout(room.seed);
+        const layout=getRogueDungeonLayout(room.seed,room.dungeonType);
         const mandatory=layout.enemies.filter(e=>e.stage===room.stage&&!e.optional);
         if(!mandatory.length || mandatory.some(e=>(room.enemyHp.get(e.id)||0)>0)) break;
         room.stage++; room.openGates=Math.max(room.openGates,room.stage);
@@ -1936,8 +1965,8 @@
 
     updateRogueRoom(room, dt, now) {
       if(!room)return;
-      const layout=getRogueDungeonLayout(room.seed);
-      const members=[...room.members].map(id=>this.clients.get(id)).filter(c=>c&&c.joined&&!c.dead&&c.hasState&&c.cave===ROGUE_DUNGEON_INDEX&&now-(c.lastStateAt||0)<5000);
+      const layout=getRogueDungeonLayout(room.seed,room.dungeonType);
+      const members=[...room.members].map(id=>this.clients.get(id)).filter(c=>c&&c.joined&&!c.dead&&c.hasState&&isRogueDungeonIndex(c.cave)&&getRogueDungeonVariant(c.cave)===(room.dungeonType||'classic')&&now-(c.lastStateAt||0)<5000);
       // 回収タイマーは誰かがゲーム内で生存・接続中の間だけ進む。ログアウト中は止める。
       const ownerOnline=[...room.recoveryBags.values()].some(bag=>[...this.clients.values()].some(c=>c.joined&&!c.dead&&c.hasState&&c.pid===bag.ownerPid&&now-(c.lastStateAt||0)<5000));
       room.recoveryTimerActive=members.length>0||ownerOnline;
@@ -1970,7 +1999,7 @@
           return true;
         }
         const step=Math.min(wd,speed*dt),nx=state.x+wx/(wd||1)*step,nz=state.z+wz/(wd||1)*step;
-        if(!isRogueDungeonWalkable(nx,nz,room.openGates)){
+        if(!isRogueDungeonWalkable(nx,nz,room.openGates,room.dungeonType)){
           state.path=[];state.pathIndex=0;state.repath=0;return false;
         }
         state.x=nx;state.z=nz;state.yaw=Math.atan2(-wx,-wz);return true;
@@ -1989,8 +2018,8 @@
           for(let attempt=0;attempt<14;attempt++){
             const a=Math.random()*Math.PI*2,r=1.0+Math.random()*2.4;
             const gx=hx+Math.cos(a)*r,gz=hz+Math.sin(a)*r;
-            if(!isRogueDungeonWalkable(gx,gz,room.openGates))continue;
-            const route=findRogueDungeonPath(state.x,state.z,gx,gz,room.openGates);
+            if(!isRogueDungeonWalkable(gx,gz,room.openGates,room.dungeonType))continue;
+            const route=findRogueDungeonPath(state.x,state.z,gx,gz,room.openGates,room.dungeonType);
             if(!route.length)continue;
             state.patrolGoal={x:route[route.length-1].x,z:route[route.length-1].z};
             state.path=route;state.pathIndex=0;
@@ -2055,7 +2084,7 @@
           if(state.phase==='charge'){
             const step=profile.chargeSpeed*dt;
             const nx=state.x+state.chargeDx*step,nz=state.z+state.chargeDz*step;
-            if(isRogueDungeonWalkable(nx,nz,room.openGates)){
+            if(isRogueDungeonWalkable(nx,nz,room.openGates,room.dungeonType)){
               state.x=nx;state.z=nz;state.yaw=Math.atan2(-state.chargeDx,-state.chargeDz);
             }else{
               state.chargeTimer=0;
@@ -2079,7 +2108,7 @@
           if(state.repath<=0||(state.targetId!==null&&state.path.length>0&&state.pathIndex>=state.path.length)){
             const ordered=members.map(c=>({c,d:Math.hypot(c.x-state.x,c.z-state.z)})).filter(v=>v.d<=chaseRange).sort((a,b)=>a.d-b.d);
             for(const candidate of ordered){
-              const route=findRogueDungeonPath(state.x,state.z,candidate.c.x,candidate.c.z,room.openGates);
+              const route=findRogueDungeonPath(state.x,state.z,candidate.c.x,candidate.c.z,room.openGates,room.dungeonType);
               if(route.length){selected=candidate.c;selectedPath=route;selectedD=candidate.d;break;}
             }
             if(selected){
@@ -2090,7 +2119,7 @@
                 if(selectedD>=profile.minRange&&selectedD<=profile.attackRange){state.path=[];state.pathIndex=0;}
                 else{
                   const goalX=selected.x-(dx/d)*profile.preferredRange,goalZ=selected.z-(dz/d)*profile.preferredRange;
-                  const rangedPath=isRogueDungeonWalkable(goalX,goalZ,room.openGates)?findRogueDungeonPath(state.x,state.z,goalX,goalZ,room.openGates):[];
+                  const rangedPath=isRogueDungeonWalkable(goalX,goalZ,room.openGates,room.dungeonType)?findRogueDungeonPath(state.x,state.z,goalX,goalZ,room.openGates,room.dungeonType):[];
                   if(rangedPath.length){state.path=rangedPath;state.pathIndex=0;}else if(selectedD<profile.minRange){state.path=[];state.pathIndex=0;}
                 }
               }
@@ -2135,13 +2164,13 @@
     }
 
     rogueRoomStateMessage(room) {
-      return {t:'rogueRoomState',instanceId:room.id,stage:room.stage,openGates:room.openGates,extractReady:room.extractReady,openedChests:[...room.openedChests],enemyHp:Object.fromEntries(room.enemyHp)};
+      return {t:'rogueRoomState',instanceId:room.id,dungeonType:room.dungeonType||'classic',stage:room.stage,openGates:room.openGates,extractReady:room.extractReady,openedChests:[...room.openedChests],enemyHp:Object.fromEntries(room.enemyHp)};
     }
 
     removeClient(id) {
       const c = this.clients.get(id);
       // 生存中に切断した場合も、最後に同期された携行データがあれば死亡時と同じ遺品袋を残す。
-      if(c && c.cave===ROGUE_DUNGEON_INDEX && !c.dead && c.rogueRoomKey && c.pid){
+      if(c && isRogueDungeonIndex(c.cave) && !c.dead && c.rogueRoomKey && c.pid){
         const room=this.rogueRooms.get(c.rogueRoomKey),payload=room&&room.memberCarry.get(c.pid);
         if(room && payload && !room.recoveryBags.has(c.pid)){
           const bag=this.createRogueRecoveryBag(room,c,payload,{x:c.x,z:c.z});
@@ -2176,7 +2205,9 @@
           break;
         }
         case 'roguePartySelect': {
-          if(!c.joined || c.cave===ROGUE_DUNGEON_INDEX) return;
+          if(!c.joined || isRogueDungeonIndex(c.cave)) return;
+          const dungeonType=msg.dungeonType==='linear'?'linear':'classic';
+          c.rogueSelectedVariant=dungeonType;
           const mode=msg.mode==='solo'?'solo':(msg.mode==='create'||msg.mode==='join'?'party':'');
           if(!mode) { c.roguePartyKey=null; this.out.sendTo(id,{t:'roguePartySelected',ok:false,reason:'invalid-mode'}); return; }
           if(mode==='solo') {
@@ -2197,7 +2228,7 @@
           const now = Date.now();
           if (now - (c.lastAttackAt || 0) < 100) return;
           c.lastAttackAt = now;
-          if(c.cave===ROGUE_DUNGEON_INDEX){
+          if(isRogueDungeonIndex(c.cave)){
             const room=this.getRogueRoomForClient(id);
             if(!room)return;
             this.broadcastRogueRoom(room,{t:'patk',id,cave:c.cave,instanceId:room.id},id);
@@ -2267,12 +2298,13 @@
           // クライアントが送れる状態フラグを定義済みの5ビットに限定する。
           c.flags = (msg.f | 0) & 31;
           c.dead = !!(c.flags & 8);
-          if(previousCave!==ROGUE_DUNGEON_INDEX && c.cave===ROGUE_DUNGEON_INDEX) this.joinRogueRoom(id);
-          else if(previousCave===ROGUE_DUNGEON_INDEX && c.cave!==ROGUE_DUNGEON_INDEX) this.leaveRogueRoom(id);
+          if(!isRogueDungeonIndex(previousCave) && isRogueDungeonIndex(c.cave)) this.joinRogueRoom(id);
+          else if(isRogueDungeonIndex(previousCave) && !isRogueDungeonIndex(c.cave)) this.leaveRogueRoom(id);
+          else if(isRogueDungeonIndex(previousCave) && isRogueDungeonIndex(c.cave) && previousCave!==c.cave){ this.leaveRogueRoom(id); this.joinRogueRoom(id); }
           break;
         }
         case 'rogueCarryState': {
-          if(!c.joined || c.dead || c.cave!==ROGUE_DUNGEON_INDEX || !c.pid) return;
+          if(!c.joined || c.dead || !isRogueDungeonIndex(c.cave) || !c.pid) return;
           const room=this.getRogueRoomForClient(id);if(!room)return;
           const payload=this.rogueCarryPayload(msg);
           if(this.hasRogueCarry(payload))room.memberCarry.set(c.pid,payload);
@@ -2280,7 +2312,7 @@
           break;
         }
         case 'rogueRecoveryDrop': {
-          if(!c.joined || !c.dead || c.cave!==ROGUE_DUNGEON_INDEX || !c.hasState || !c.pid) {
+          if(!c.joined || !c.dead || !isRogueDungeonIndex(c.cave) || !c.hasState || !c.pid) {
             this.out.sendTo(id,{t:'rogueRecoveryDropResult',ok:false,reason:'invalid-state'});return;
           }
           const room=this.getRogueRoomForClient(id);if(!room){this.out.sendTo(id,{t:'rogueRecoveryDropResult',ok:false,reason:'no-room'});return;}
@@ -2298,7 +2330,7 @@
         }
         case 'rogueRecoveryClaim': {
           const reply=result=>this.out.sendTo(id,Object.assign({t:'rogueRecoveryClaimResult',instanceId:(c&&c.rogueRoomKey&&this.rogueRooms.get(c.rogueRoomKey)?.id)||0},result));
-          if(!c.joined || c.dead || c.cave!==ROGUE_DUNGEON_INDEX || !c.hasState || !c.pid){reply({ok:false,reason:'invalid-state'});return;}
+          if(!c.joined || c.dead || !isRogueDungeonIndex(c.cave) || !c.hasState || !c.pid){reply({ok:false,reason:'invalid-state'});return;}
           const room=this.getRogueRoomForClient(id);if(!room){reply({ok:false,reason:'no-room'});return;}
           const bag=room.recoveryBags.get(c.pid);
           if(!bag || (typeof msg.bagId==='string'&&msg.bagId!==bag.bagId)){reply({ok:false,reason:'not-found'});return;}
@@ -2310,12 +2342,12 @@
           break;
         }
         case 'rogueChestOpen': {
-          if(!c.joined || c.dead || c.cave!==ROGUE_DUNGEON_INDEX) return;
+          if(!c.joined || c.dead || !isRogueDungeonIndex(c.cave)) return;
           const room=this.getRogueRoomForClient(id);
           if(!room) return;
           const idx=Number.isInteger(msg.index)?msg.index:-1;
           if(idx<0 || idx>=5 || room.openedChests.has(idx) || !c.hasState) return;
-          const chest=getRogueDungeonLayout(room.seed).chests[idx];
+          const chest=getRogueDungeonLayout(room.seed,room.dungeonType).chests[idx];
           if(!chest || distanceXZ(c.x,c.z,chest.x,chest.z)>5.2) return;
           room.openedChests.add(idx);
           const reward=getRogueChestReward(room.seed,idx);
@@ -2325,12 +2357,12 @@
           break;
         }
         case 'rogueHit': {
-          if(!c.joined || c.dead || c.cave!==ROGUE_DUNGEON_INDEX || !c.hasState) return;
+          if(!c.joined || c.dead || !isRogueDungeonIndex(c.cave) || !c.hasState) return;
           const room=this.getRogueRoomForClient(id);
           if(!room) return;
           const targetId=typeof msg.targetId==='string' && /^(?:e(?:[0-9]|1[0-9])|boss)$/.test(msg.targetId)?msg.targetId:'';
           if(!targetId) return;
-          const layout=getRogueDungeonLayout(room.seed);
+          const layout=getRogueDungeonLayout(room.seed,room.dungeonType);
           const target=targetId==='boss'?layout.boss:layout.enemies.find(e=>e.id===targetId);
           if(!target || (target.boss && room.stage!==3) || (!target.boss && !target.optional && target.stage!==room.stage)) return;
           const tx=msg.x,tz=msg.z,enemyState=room.enemyStates.get(targetId);
@@ -2821,7 +2853,7 @@
       const players = [];
       for (const c of this.clients.values()) {
         if (c.joined) {
-          const rogueRoom=c.cave===ROGUE_DUNGEON_INDEX?this.getRogueRoomForClient(c.id):null;
+          const rogueRoom=isRogueDungeonIndex(c.cave)?this.getRogueRoomForClient(c.id):null;
           players.push([c.id, r2(c.x), r2(c.y), r2(c.z), r2(c.ry), c.cave, c.flags, rogueRoom?rogueRoom.id:0]);
         }
       }
@@ -3040,7 +3072,7 @@
     getClosedFenceLoops, isInsideFenceEnclosure, findSafeEscapePoint,
     MAX_OUTDOOR_COLLECTIBLE_KEYS, MAX_CAVE_ORE_KEYS, MAX_CAVE_ITEM_KEYS, MAX_UNDERWATER_RESOURCES, UNDERWATER_INTERACT_RADIUS,
     CAVE_MOUTH_OFFSET, CAVE_EXIT_RECESS, CAVE_EXIT_OFFSET,
-    CAVE_ROOM_RADIUS, CAVE_INTERIOR_ENTRY, CAVE_INTERIOR_EXIT, ROGUE_DUNGEON_INDEX, ROGUE_WALK_AREAS, ROGUE_GATE_Z, isRogueDungeonWalkable, getRogueDungeonFloorCandidates, rogueFloorHoleContainsPoint, findRogueDungeonPath, getRogueDungeonLayout, resolveRogueDungeonSpawn, getRogueChestReward, ROGUE_ENEMY_PROFILES, getRogueEnemyProfile,
+    CAVE_ROOM_RADIUS, CAVE_INTERIOR_ENTRY, CAVE_INTERIOR_EXIT, ROGUE_DUNGEON_INDEX, ROGUE_LINEAR_DUNGEON_INDEX, ROGUE_WALK_AREAS, ROGUE_GATE_Z, ROGUE_LINEAR_WALK_AREAS, ROGUE_LINEAR_GATE_Z, isRogueDungeonIndex, getRogueDungeonVariant, getRogueDungeonDefinition, isRogueDungeonWalkable, getRogueDungeonFloorCandidates, rogueFloorHoleContainsPoint, findRogueDungeonPath, getRogueDungeonLayout, resolveRogueDungeonSpawn, getRogueChestReward, ROGUE_ENEMY_PROFILES, getRogueEnemyProfile,
     getBossHome, BOSS_MAX_HP, BOSS_RADIUS, BOSS_RESPAWN_MS, BOSS_HIT_RANGE, BOSS_ATTACKS, BOSS_STATE_CODE,
   };
 });
