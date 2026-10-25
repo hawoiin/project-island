@@ -567,7 +567,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v69.0</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v69.1</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -10098,12 +10098,11 @@ window.startGame = function(NETINIT){
   document.addEventListener('visibilitychange', ()=>{ if (document.hidden) saveProgress(); });
   NETINIT.setHandler(handleNet);
   updateNetInfo();
-  updateHelp();
   requestAnimationFrame(animate);
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=69.0-shade-enemy-motion"></script>
+<script src="shared.js?v=69.1-help-init-fix"></script>
 <script src="boot.js"></script>
 </body>
 </html>
