@@ -5,25 +5,26 @@ const path=require('path');
 const html=fs.readFileSync(path.join(__dirname,'../public/index.html'),'utf8');
 const shared=fs.readFileSync(path.join(__dirname,'../public/shared.js'),'utf8');
 function check(name,fn){try{fn();console.log('PASS '+name);}catch(e){console.error('FAIL '+name+': '+e.message);process.exitCode=1;}}
-check('シェイドは人型・節足型ではなく四足の生物モデル',()=>{
+check('シェイドはプレイヤーと同じ箱形ローポリを基礎にした人型',()=>{
   assert.match(html,/else if\(kind==='shade'&&!boss\)/);
-  assert.match(html,/visualRig=\{creature:true,body,torso,head,tail,legs/);
-  for(const part of ['shadeCreatureBody','shadeCreatureBelly','shadeCreatureNeck','shadeCreatureHead','shadeCreatureMuzzle','shadeCreaturePlate','shadeCreatureLegUpper','shadeCreatureLegLower','shadeCreatureFoot']) assert.ok(html.includes(part),`missing ${part}`);
-  assert.match(html,/for\(const front of \[true,false\]\)/,'four legs should be generated from front/rear pairs');
-  assert.match(html,/重なった外殻/);
-  assert.doesNotMatch(html,/shadeChestPlate|shadeUpperArm|shadeForearm|shadeSkirtPanel/,'old humanoid parts must be removed');
+  assert.match(html,/shadeTorso:new THREE\.BoxGeometry/);
+  assert.match(html,/shadeHead:new THREE\.BoxGeometry/);
+  assert.match(html,/shadeUpperArm:new THREE\.BoxGeometry/);
+  assert.match(html,/shadeFoot:new THREE\.BoxGeometry/);
+  assert.match(html,/プレイヤーの完成した箱形シルエットを基準にした人型シェイド/);
+  assert.doesNotMatch(html,/shadeCreatureBody|shadeCreaturePlate|shadeCreatureLegUpper/);
 });
-check('四足歩行・攻撃前の低い構え・攻撃後の踏み込みを表示する',()=>{
-  assert.match(html,/if\(rig\.creature\)/);
-  assert.match(html,/rig\.gaitPhase\+\=/);
+check('歩行・予備動作・打撃・回復が人型の部位に反映される',()=>{
+  assert.match(html,/visualRig=\{body,torso,head,arms,legs,gaitPhase/);
+  assert.match(html,/rig\.gaitPhase\+\=dt\*/);
   assert.match(html,/leg\.hip\.rotation\.x=swing/);
-  assert.match(html,/rig\.body\.position\.z=-lunge\*\.13/);
+  assert.match(html,/arm\.shoulder\.rotation\.x=idleSwing-windup/);
   for(const phase of ['windup','charge','recover']) assert.ok(html.includes(`e.phase==='${phase}'`),`missing ${phase} visual pose`);
   assert.match(html,/updateRogueEnemyVisual\(e,dt\);/);
 });
-check('敵AI・ダメージ・攻撃タイミングを管理する共有サーバーコードは変更対象外',()=>{
+check('敵AIと攻撃タイミングを管理する共有サーバーコードは変更していない',()=>{
   assert.match(shared,/const ROGUE_ENEMY_PROFILES/);
   assert.match(shared,/state\.phase='windup'/);
-  assert.match(shared,/this\.out\.sendTo\(victim\.id,\{t:'roguePlayerHurt'/);
+  assert.match(shared,/roguePlayerHurt/);
 });
-if(!process.exitCode)console.log('Rogue shade creature checks passed.');
+if(!process.exitCode)console.log('Rogue shade humanoid checks passed.');

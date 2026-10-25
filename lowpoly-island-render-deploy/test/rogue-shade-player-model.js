@@ -1,0 +1,15 @@
+'use strict';
+const assert=require('assert');
+const fs=require('fs');
+const path=require('path');
+const html=fs.readFileSync(path.join(__dirname,'../public/index.html'),'utf8');
+assert.match(html,/shadeTorso:new THREE\.BoxGeometry\(\.82,\.62,\.54\)/);
+assert.match(html,/shadeHead:new THREE\.BoxGeometry\(\.50,\.42,\.46\)/);
+assert.match(html,/shadeUpperArm:new THREE\.BoxGeometry/);
+assert.match(html,/shadeThigh:new THREE\.BoxGeometry/);
+assert.match(html,/visualRig=\{body,torso,head,arms,legs,gaitPhase/);
+assert.match(html,/プレイヤーの完成した箱形シルエットを基準にした人型シェイド/);
+assert.match(html,/head\.position\.set\(0,1\.75,0\)/);
+assert.match(html,/glow\.position\.set\(side\*\.105,\.025,-\.258\)/);
+assert.doesNotMatch(html,/shadeCreatureBody|shadeCreatureLegUpper|for\(const front of \[true,false\]\)/);
+console.log('PASS player-inspired box-humanoid Shade model');
