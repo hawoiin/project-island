@@ -9,5 +9,5 @@ check(html.includes('if (elapsed - lastWindSwayUpdate < 1/30) return;'), 'sway t
 check(html.includes('function shouldUpdateEnemyDetailAnimation(en, mesh, dt)'), 'distant pose scheduler missing');
 check(html.includes('distSq < 34*34') && html.includes('distSq < 70*70'), 'distance tiers missing');
 check(html.includes('en.dying || en.ph || en.atkT > 0 || en.hitFlash > 0 || en.hpBarTimer > 0'), 'combat animation priority missing');
-check(/<div id="versionLabel"[^>]*>v70\.0<\/div>/.test(html), 'version label must display v70.0');
+check(/<div id="versionLabel"[^>]*>v70\.1<\/div>/.test(html), 'version label must display v70.1');
 console.log('PASS performance safeguards and animation priorities');

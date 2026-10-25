@@ -12,5 +12,5 @@ check('実際のフレーム間隔を上限カット前に計測する', html.in
 check('描画コールと三角形数を表示する', html.includes('renderer.info.render') && html.includes('draw.triangles'));
 check('敵/採集物/建築物数を表示する', html.includes('敵: ${enemies.length}') && html.includes('建築物: ${placedStructures.length}'));
 check('HUDは描画完了後に計測する', html.indexOf('renderer.render(activeScene, camera);') < html.indexOf('updatePerformanceHud(performanceFrameStartedAt, actualFrameGapMs)'));
-check('バージョンv70.0とキャッシュ更新が反映される', /<div id="versionLabel"[^>]*>v70\.0<\/div>/.test(html) && html.includes('shared.js?v=70.0-player-shade'));
+check('バージョンv70.1とキャッシュ更新が反映される', /<div id="versionLabel"[^>]*>v70\.1<\/div>/.test(html) && html.includes('shared.js?v=70.1-shade-ghoul'));
 console.log('Performance HUD tests passed.');

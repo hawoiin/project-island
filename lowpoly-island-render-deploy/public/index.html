@@ -567,7 +567,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v70.0</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v70.1</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -2512,12 +2512,16 @@ window.startGame = function(NETINIT){
   }
 
   const ROGUE_ENEMY_MATS={
-    shade:new THREE.MeshStandardMaterial({color:0x526a81,emissive:0x111d30,emissiveIntensity:.12,flatShading:true,roughness:.92}),
-    shadeMantle:new THREE.MeshStandardMaterial({color:0x2d3b50,emissive:0x080f1b,emissiveIntensity:.12,flatShading:true,roughness:.96}),
-    shadeEdge:new THREE.MeshStandardMaterial({color:0x91d9f3,emissive:0x246a88,emissiveIntensity:.3,flatShading:true,roughness:.8}),
-    shadeArmor:new THREE.MeshStandardMaterial({color:0x3c4f67,emissive:0x101826,emissiveIntensity:.08,flatShading:true,roughness:.9}),
-    shadeFace:new THREE.MeshStandardMaterial({color:0x151f2d,emissive:0x070d16,emissiveIntensity:.08,flatShading:true,roughness:.96}),
-    shadeEye:new THREE.MeshBasicMaterial({color:0xc4f2ff}),
+    // シェイドは金属鎧ではなく、暗い遺跡に棲む痩せた人型捕食生物。発光は目だけに抑える。
+    shade:new THREE.MeshStandardMaterial({color:0x55584b,flatShading:true,roughness:1}),
+    shadeMantle:new THREE.MeshStandardMaterial({color:0x393d34,flatShading:true,roughness:1}),
+    shadeEdge:new THREE.MeshStandardMaterial({color:0x777866,flatShading:true,roughness:1}),
+    shadeArmor:new THREE.MeshStandardMaterial({color:0x45483d,flatShading:true,roughness:1}),
+    shadeFace:new THREE.MeshStandardMaterial({color:0x272a24,flatShading:true,roughness:1}),
+    shadeEye:new THREE.MeshBasicMaterial({color:0xc5b86f}),
+    shadeBone:new THREE.MeshStandardMaterial({color:0x93866c,flatShading:true,roughness:1}),
+    shadeSocket:new THREE.MeshStandardMaterial({color:0x191b17,flatShading:true,roughness:1}),
+    shadeMouth:new THREE.MeshStandardMaterial({color:0x100f0d,flatShading:true,roughness:1}),
     crawler:new THREE.MeshStandardMaterial({color:0x9a5a43,emissive:0x35140d,emissiveIntensity:.25,flatShading:true,roughness:.9}),
     spitter:new THREE.MeshStandardMaterial({color:0x397b83,emissive:0x146c72,emissiveIntensity:.45,flatShading:true,roughness:.72}),
     charger:new THREE.MeshStandardMaterial({color:0x9b5837,emissive:0x5a2414,emissiveIntensity:.35,flatShading:true,roughness:.88}),
@@ -2533,25 +2537,30 @@ window.startGame = function(NETINIT){
     arm:new THREE.ConeGeometry(.28,1.2,5), bossArm:new THREE.ConeGeometry(.48,1.9,5),
     bossSpike:new THREE.ConeGeometry(.28,.95,5), chargerHorn:new THREE.ConeGeometry(.24,.78,5),
     spitterCore:new THREE.OctahedronGeometry(.32,0), eye:new THREE.OctahedronGeometry(.11,0),
-    // シェイド用：センザンコウの重なる外殻と、イノシシの低い前傾姿勢を抽象化した四足の洞窟生物。
-    // 角・触角・人型の装甲パーツには頼らず、共有ジオメトリで描画負荷を抑える。
-    // シェイドはプレイヤーと同系統の箱形ローポリ造形を使う。余計な球・円錐の継ぎ足しを避ける。
-    shadeTorso:new THREE.BoxGeometry(.82,.62,.54),
-    shadeWaist:new THREE.BoxGeometry(.59,.16,.44),
-    shadeTorsoInset:new THREE.BoxGeometry(.44,.31,.035),
-    shadeNeck:new THREE.BoxGeometry(.18,.19,.20),
-    shadeHead:new THREE.BoxGeometry(.50,.42,.46),
-    shadeFacePlate:new THREE.BoxGeometry(.36,.22,.035),
-    shadeBrow:new THREE.BoxGeometry(.34,.055,.045),
-    shadeEyeGlow:new THREE.BoxGeometry(.095,.055,.018),
-    shadeEye:new THREE.BoxGeometry(.065,.027,.014),
-    shadeUpperArm:new THREE.BoxGeometry(.21,.38,.21),
-    shadeForearm:new THREE.BoxGeometry(.18,.31,.19),
-    shadeJoint:new THREE.BoxGeometry(.16,.13,.17),
-    shadeHand:new THREE.BoxGeometry(.16,.14,.17),
-    shadeThigh:new THREE.BoxGeometry(.24,.34,.24),
-    shadeShin:new THREE.BoxGeometry(.21,.28,.22),
-    shadeFoot:new THREE.BoxGeometry(.23,.12,.29)
+    // シェイド用：プレイヤーやクラシック動物と同じ箱形ローポリを土台に、前傾・長腕・痩せた胴・牙で生物らしい輪郭にする。
+    // 金属プレートや発光パーツを重ねず、皮膚・骨・暗い眼窩という少数の材質で表現する。
+    shadeTorso:new THREE.BoxGeometry(.68,.62,.48),
+    shadeShoulders:new THREE.BoxGeometry(.76,.27,.45),
+    shadeHump:new THREE.BoxGeometry(.54,.34,.39),
+    shadeWaist:new THREE.BoxGeometry(.47,.29,.37),
+    shadeNeck:new THREE.BoxGeometry(.20,.24,.22),
+    shadeHead:new THREE.BoxGeometry(.42,.44,.40),
+    shadeJaw:new THREE.BoxGeometry(.31,.15,.29),
+    shadeSnout:new THREE.BoxGeometry(.17,.15,.17),
+    shadeBrow:new THREE.BoxGeometry(.35,.075,.075),
+    shadeSocket:new THREE.BoxGeometry(.095,.085,.026),
+    shadeEye:new THREE.BoxGeometry(.041,.031,.018),
+    shadeMouth:new THREE.BoxGeometry(.22,.045,.018),
+    shadeRib:new THREE.BoxGeometry(.19,.045,.035),
+    shadeUpperArm:new THREE.BoxGeometry(.22,.39,.22),
+    shadeForearm:new THREE.BoxGeometry(.21,.40,.21),
+    shadeJoint:new THREE.BoxGeometry(.15,.13,.15),
+    shadeHand:new THREE.BoxGeometry(.19,.14,.20),
+    shadeClaw:new THREE.ConeGeometry(.027,.13,4),
+    shadeThigh:new THREE.BoxGeometry(.24,.34,.23),
+    shadeShin:new THREE.BoxGeometry(.18,.29,.19),
+    shadeFoot:new THREE.BoxGeometry(.22,.12,.28),
+    shadeFang:new THREE.ConeGeometry(.027,.095,4)
   };
   const ROGUE_ATTACK_WARNING_GEO=new THREE.TorusGeometry(1,.055,4,28);
   const ROGUE_ATTACK_WARNING_MATS={
@@ -2642,53 +2651,61 @@ window.startGame = function(NETINIT){
         leg.position.set(Math.cos(a)*.67,.32,Math.sin(a)*.68); leg.rotation.z=Math.cos(a)*.8; leg.rotation.x=Math.sin(a)*.55; g.add(leg);
       }
     }else if(kind==='shade'&&!boss){
-      // プレイヤーの完成した箱形シルエットを基準にした人型シェイド。
-      // 頭・胴・腕・脚の比率と接続を揃え、暗い配色と発光する目だけで敵らしさを出す。
+      // うつむいた洞窟の捕食生物。プレイヤーと共通の箱形造形を使うが、鎧・機械のような面構成にはしない。
       // 前方は敵モデル共通のローカル -Z。AI・攻撃判定・同期処理は変更しない。
       const body=new THREE.Group();g.add(body);
-      const torso=new THREE.Group();torso.position.set(0,1.16,0);body.add(torso);
-      const torsoMesh=new THREE.Mesh(ROGUE_GEOMETRIES.shadeTorso,mat);torso.add(torsoMesh);
-      const torsoInset=new THREE.Mesh(ROGUE_GEOMETRIES.shadeTorsoInset,ROGUE_ENEMY_MATS.shadeMantle);
-      torsoInset.position.set(0,.015,-.278);torso.add(torsoInset);
-      // 腰は胴体の下端に重ね、頭・胴・腰の境界をプレイヤーと同じ単純な構成で見せる。
-      const waist=new THREE.Mesh(ROGUE_GEOMETRIES.shadeWaist,ROGUE_ENEMY_MATS.shadeMantle);
-      waist.position.set(0,.765,0);body.add(waist);
-      const neck=new THREE.Mesh(ROGUE_GEOMETRIES.shadeNeck,ROGUE_ENEMY_MATS.shadeArmor);
-      neck.position.set(0,1.49,0);body.add(neck);
-      const head=new THREE.Group();head.position.set(0,1.75,0);body.add(head);
-      const skull=new THREE.Mesh(ROGUE_GEOMETRIES.shadeHead,mat);head.add(skull);
-      const face=new THREE.Mesh(ROGUE_GEOMETRIES.shadeFacePlate,ROGUE_ENEMY_MATS.shadeFace);
-      face.position.set(0,-.012,-.237);head.add(face);
-      const brow=new THREE.Mesh(ROGUE_GEOMETRIES.shadeBrow,ROGUE_ENEMY_MATS.shadeMantle);
-      brow.position.set(0,.135,-.238);head.add(brow);
+      const torso=new THREE.Group();torso.position.set(0,1.02,0);torso.rotation.x=-.10;torso.rotation.z=.015;body.add(torso);
+      const torsoMesh=new THREE.Mesh(ROGUE_GEOMETRIES.shadeTorso,mat);torsoMesh.castShadow=true;torso.add(torsoMesh);
+      const shoulders=new THREE.Mesh(ROGUE_GEOMETRIES.shadeShoulders,mat);shoulders.position.set(0,.17,.005);shoulders.rotation.x=-.08;torso.add(shoulders);
+      const hump=new THREE.Mesh(ROGUE_GEOMETRIES.shadeHump,ROGUE_ENEMY_MATS.shadeMantle);hump.position.set(0,.22,.20);hump.rotation.x=.12;torso.add(hump);
+      // 前胸の細い筋は装甲板ではなく、痩せた胴体の骨ばった凹凸として薄く置く。
       for(const side of [-1,1]){
-        const glow=new THREE.Mesh(ROGUE_GEOMETRIES.shadeEyeGlow,ROGUE_ENEMY_MATS.shadeEdge);
-        glow.position.set(side*.105,.025,-.258);head.add(glow);
-        const eye=new THREE.Mesh(ROGUE_GEOMETRIES.shadeEye,ROGUE_ENEMY_MATS.shadeEye);
-        eye.position.set(side*.105,.025,-.27);head.add(eye);
+        for(const yy of [-.12,.015,.15]){
+          const rib=new THREE.Mesh(ROGUE_GEOMETRIES.shadeRib,ROGUE_ENEMY_MATS.shadeEdge);
+          rib.position.set(side*(.12+(yy>.1?-.025:0)),yy,-.245);rib.rotation.z=side*.12;torso.add(rib);
+        }
       }
-      // 腕は上腕・肘・前腕に分ける。プレイヤー同様の箱形で、細い節足や巨大な肩当ては使わない。
+      const waist=new THREE.Mesh(ROGUE_GEOMETRIES.shadeWaist,ROGUE_ENEMY_MATS.shadeMantle);
+      waist.position.set(0,.63,.01);body.add(waist);
+      const neck=new THREE.Mesh(ROGUE_GEOMETRIES.shadeNeck,mat);neck.position.set(0,1.31,-.015);neck.rotation.x=-.28;body.add(neck);
+      const head=new THREE.Group();head.position.set(0,1.49,-.055);head.rotation.x=-.07;head.rotation.z=.035;body.add(head);
+      const skull=new THREE.Mesh(ROGUE_GEOMETRIES.shadeHead,mat);skull.position.set(0,.015,0);head.add(skull);
+      const jaw=new THREE.Mesh(ROGUE_GEOMETRIES.shadeJaw,ROGUE_ENEMY_MATS.shadeFace);jaw.position.set(0,-.145,-.095);jaw.rotation.x=-.08;head.add(jaw);
+      const snout=new THREE.Mesh(ROGUE_GEOMETRIES.shadeSnout,ROGUE_ENEMY_MATS.shadeMantle);snout.position.set(0,-.045,-.205);head.add(snout);
+      const brow=new THREE.Mesh(ROGUE_GEOMETRIES.shadeBrow,ROGUE_ENEMY_MATS.shadeMantle);brow.position.set(0,.105,-.195);head.add(brow);
+      for(const side of [-1,1]){
+        const socket=new THREE.Mesh(ROGUE_GEOMETRIES.shadeSocket,ROGUE_ENEMY_MATS.shadeSocket);
+        socket.position.set(side*.105,.005,-.207);head.add(socket);
+        const eye=new THREE.Mesh(ROGUE_GEOMETRIES.shadeEye,ROGUE_ENEMY_MATS.shadeEye);
+        eye.position.set(side*.105,.004,-.224);head.add(eye);
+        const fang=new THREE.Mesh(ROGUE_GEOMETRIES.shadeFang,ROGUE_ENEMY_MATS.shadeBone);
+        fang.position.set(side*.075,-.145,-.235);fang.rotation.z=Math.PI;head.add(fang);
+      }
+      const mouth=new THREE.Mesh(ROGUE_GEOMETRIES.shadeMouth,ROGUE_ENEMY_MATS.shadeMouth);mouth.position.set(0,-.145,-.246);head.add(mouth);
+      // 肩は狭め、前腕は長め。手先の小さな爪で生物らしさを出し、金属関節は使わない。
       const arms={},legs=[];
       for(const side of [-1,1]){
-        const shoulder=new THREE.Group();shoulder.position.set(side*.465,1.31,0);body.add(shoulder);
-        const upper=new THREE.Mesh(ROGUE_GEOMETRIES.shadeUpperArm,mat);
-        upper.position.set(0,-.185,0);shoulder.add(upper);
-        const elbow=new THREE.Group();elbow.position.set(0,-.365,0);shoulder.add(elbow);
-        const joint=new THREE.Mesh(ROGUE_GEOMETRIES.shadeJoint,ROGUE_ENEMY_MATS.shadeArmor);elbow.add(joint);
-        const forearm=new THREE.Mesh(ROGUE_GEOMETRIES.shadeForearm,ROGUE_ENEMY_MATS.shadeMantle);
-        forearm.position.set(0,-.155,0);elbow.add(forearm);
-        const hand=new THREE.Mesh(ROGUE_GEOMETRIES.shadeHand,ROGUE_ENEMY_MATS.shadeArmor);
-        hand.position.set(0,-.33,-.018);elbow.add(hand);
+        const shoulder=new THREE.Group();shoulder.position.set(side*.36,1.22,side===1?-.015:.015);shoulder.rotation.z=side*.035;body.add(shoulder);
+        const upper=new THREE.Mesh(ROGUE_GEOMETRIES.shadeUpperArm,mat);upper.position.set(0,-.19,0);shoulder.add(upper);
+        const elbow=new THREE.Group();elbow.position.set(0,-.36,0);shoulder.add(elbow);
+        const joint=new THREE.Mesh(ROGUE_GEOMETRIES.shadeJoint,ROGUE_ENEMY_MATS.shadeMantle);elbow.add(joint);
+        const forearm=new THREE.Mesh(ROGUE_GEOMETRIES.shadeForearm,mat);forearm.position.set(0,-.18,-.005);forearm.rotation.x=-.06;elbow.add(forearm);
+        const hand=new THREE.Mesh(ROGUE_GEOMETRIES.shadeHand,ROGUE_ENEMY_MATS.shadeMantle);hand.position.set(0,-.37,-.045);elbow.add(hand);
+        for(const finger of [-1,0,1]){
+          const claw=new THREE.Mesh(ROGUE_GEOMETRIES.shadeClaw,ROGUE_ENEMY_MATS.shadeBone);
+          claw.position.set(finger*.058,-.425,-.135);claw.rotation.x=-Math.PI/2;claw.rotation.z=finger*.16;elbow.add(claw);
+        }
         arms[side]={shoulder,elbow};
-        const hip=new THREE.Group();hip.position.set(side*.215,.665,.015);body.add(hip);
-        const thigh=new THREE.Mesh(ROGUE_GEOMETRIES.shadeThigh,mat);
-        thigh.position.set(0,-.16,0);hip.add(thigh);
-        const knee=new THREE.Group();knee.position.set(0,-.325,0);hip.add(knee);
-        const kneeBlock=new THREE.Mesh(ROGUE_GEOMETRIES.shadeJoint,ROGUE_ENEMY_MATS.shadeArmor);knee.add(kneeBlock);
-        const shin=new THREE.Mesh(ROGUE_GEOMETRIES.shadeShin,ROGUE_ENEMY_MATS.shadeMantle);
-        shin.position.set(0,-.135,0);knee.add(shin);
-        const foot=new THREE.Mesh(ROGUE_GEOMETRIES.shadeFoot,ROGUE_ENEMY_MATS.shadeArmor);
-        foot.position.set(0,-.27,-.065);knee.add(foot);
+        const hip=new THREE.Group();hip.position.set(side*.18,.62,.01);body.add(hip);
+        const thigh=new THREE.Mesh(ROGUE_GEOMETRIES.shadeThigh,mat);thigh.position.set(0,-.16,.01);hip.add(thigh);
+        const knee=new THREE.Group();knee.position.set(0,-.30,0);hip.add(knee);
+        const kneeBlock=new THREE.Mesh(ROGUE_GEOMETRIES.shadeJoint,ROGUE_ENEMY_MATS.shadeMantle);kneeBlock.position.y=-.015;knee.add(kneeBlock);
+        const shin=new THREE.Mesh(ROGUE_GEOMETRIES.shadeShin,mat);shin.position.set(0,-.14,.025);knee.add(shin);
+        const foot=new THREE.Mesh(ROGUE_GEOMETRIES.shadeFoot,ROGUE_ENEMY_MATS.shadeMantle);foot.position.set(0,-.27,-.055);knee.add(foot);
+        for(const toe of [-1,1]){
+          const claw=new THREE.Mesh(ROGUE_GEOMETRIES.shadeClaw,ROGUE_ENEMY_MATS.shadeBone);
+          claw.scale.set(.68,.72,.68);claw.position.set(toe*.055,-.31,-.17);claw.rotation.x=-Math.PI/2;knee.add(claw);
+        }
         legs.push({hip,knee,side,phase:side<0?Math.PI:0});
       }
       visualRig={body,torso,head,arms,legs,gaitPhase:Math.random()*Math.PI*2,phase:'idle',phaseTime:0};
@@ -10159,7 +10176,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=70.0-player-shade"></script>
+<script src="shared.js?v=70.1-shade-ghoul"></script>
 <script src="boot.js"></script>
 </body>
 </html>
