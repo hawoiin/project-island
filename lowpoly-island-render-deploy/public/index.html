@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2712%27 fill=%27%230b1220%27/%3E%3Cpath d=%27M10 52 32 8 54 52Z%27 fill=%27%23e8c07d%27/%3E%3C/svg%3E">
-<title>Lowpoly Fantasy — 探索の島</title>
+<title>Lowpoly Island — 探索の島</title>
 <style>
   html, body { margin:0; padding:0; overflow:hidden; background:#0b1220; font-family: -apple-system, "Hiragino Sans", sans-serif; touch-action:none; overscroll-behavior:none; }
   canvas { display:block; touch-action:none; }
@@ -37,13 +37,6 @@
   }
   #prompt.show { opacity:1; }
 
-  #help {
-    position:fixed; bottom:16px; left:16px; z-index:10;
-    color:#f5f0e6; opacity:.55; font-size:12px; line-height:1.6;
-    text-shadow:0 2px 6px rgba(0,0,0,.5);
-    pointer-events:none; user-select:none;
-  }
-
   #startOverlay {
     position:fixed; inset:0; z-index:100;
     background:radial-gradient(ellipse at 50% 30%, #2a3550 0%, #10141f 70%);
@@ -66,7 +59,6 @@
   /* ---- モバイル操作 ---- */
   #touchLayer { position:fixed; inset:0; z-index:20; display:none; }
   body.touch #touchLayer { display:block; }
-  body.touch #help { display:none; }
 
   #lookZone { position:absolute; right:0; top:0; width:55%; height:100%; touch-action:none; }
   #moveZone { position:absolute; left:0; top:0; width:45%; height:100%; touch-action:none; }
@@ -571,12 +563,11 @@
 
 <div id="startOverlay">
   <h1>探索の島</h1>
-  <p>WASD移動 / マウスで視点 / クリックで攻撃 / Eで採集・操作 / 建築物の回収はE長押し / Spaceジャンプ / Shiftダッシュ / Bでビルド / Cで図鑑 / Enterでチャット / 1 手を振る・2 ダンス・3 びっくり・4 ガッツポーズ / Oで設定</p>
   <p id="freePlanNotice" hidden>Render Free仕様：共有ワールドとダンジョンの進行・遺品袋はサーバー内の一時データです。スリープ・再起動・更新後は初期状態に戻ることがあります。大切な建築は設定からJSONを書き出して保管してください。個人データはこのブラウザ内に保存されます。</p>
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v66.0</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v69.0</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -602,7 +593,6 @@
 <div id="chatBox"><input id="chatInput" type="text" autocomplete="off" placeholder="Enterで送信 / Escでキャンセル"></div>
 <button id="chatBtn" type="button" aria-label="チャットを開く" title="チャットを開く"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.5 7.5H5l1.7-3.4A7.5 7.5 0 1 1 20 11.5Z"/><path d="M8.5 11.5h.01M12.5 11.5h.01M16.5 11.5h.01"/></svg></button>
 <div id="toast"><div class="badge"><div class="t1" id="toastLabel">発見</div><div class="t2" id="toastText"></div></div></div>
-<div id="help">クリックで視点操作を開始</div>
 
 <div id="minimapWrap"><canvas id="minimap" width="120" height="120"></canvas></div>
 
@@ -1666,7 +1656,7 @@ window.startGame = function(NETINIT){
     }
   }
 
-  // v66: 旧遺跡と独立した一本道試作遺跡を並存させる。活動中の入口に応じて地形定義を切り替える。
+  // v67: 旧遺跡と独立した分岐型試作遺跡を並存させる。同期互換のため内部variant名linearを維持し、入口に応じて地形を切り替える。
   const CLASSIC_ROGUE_DUNGEON_INDEX = Shared.ROGUE_DUNGEON_INDEX;
   const LINEAR_ROGUE_DUNGEON_INDEX = Shared.ROGUE_LINEAR_DUNGEON_INDEX;
   let ROGUE_DUNGEON_INDEX = CLASSIC_ROGUE_DUNGEON_INDEX;
@@ -1685,7 +1675,7 @@ window.startGame = function(NETINIT){
     const t=len2>1e-8?THREE.MathUtils.clamp(((x-ax)*dx+(z-az)*dz)/len2,0,1):0;
     return Math.hypot(x-(ax+dx*t), z-(az+dz*t));
   }
-  function rogueFloorHeight(x,z,segmentFactor=0.45){
+  function rogueFloorHeight(x,z,segmentFactor=ROGUE_DUNGEON_VARIANT==='linear'?0.5:0.45){
     // 傾斜通路は接続点から接続点まで高さを線形補間し、部屋の床と段差なく結ぶ。
     let best=null;
     for(const a of ROGUE_WALK_AREAS){
@@ -2104,25 +2094,24 @@ window.startGame = function(NETINIT){
     Math.random = Shared.mulberry32(((NETINIT.welcome.seed >>> 0) ^ 0x60d03a71) >>> 0);
     try {
       const s = new THREE.Scene();
-      s.background = new THREE.Color(0x080c13);
-      s.fog = new THREE.FogExp2(0x080c13, 0.0032);
-      s.add(new THREE.HemisphereLight(0x8499ab, 0x17191d, 0.95));
-      const fill = new THREE.DirectionalLight(0xa9c8dd, 0.75); fill.position.set(-28,42,25); s.add(fill);
+      s.background = new THREE.Color(0x100b10);
+      s.fog = new THREE.FogExp2(0x100b10, 0.0032);
+      s.add(new THREE.HemisphereLight(0xb68b78, 0x21161b, 0.95));
+      const fill = new THREE.DirectionalLight(0xe4b88e, 0.75); fill.position.set(-28,42,25); s.add(fill);
       const rockMats = [
-        new THREE.MeshStandardMaterial({color:0x373d43,flatShading:true,roughness:1}),
-        new THREE.MeshStandardMaterial({color:0x4d5358,flatShading:true,roughness:1}),
-        new THREE.MeshStandardMaterial({color:0x65665f,flatShading:true,roughness:1}),
-        new THREE.MeshStandardMaterial({color:0x272e35,flatShading:true,roughness:1}),
+        new THREE.MeshStandardMaterial({color:0x44363a,flatShading:true,roughness:1}),
+        new THREE.MeshStandardMaterial({color:0x5c4447,flatShading:true,roughness:1}),
+        new THREE.MeshStandardMaterial({color:0x76605b,flatShading:true,roughness:1}),
+        new THREE.MeshStandardMaterial({color:0x30272d,flatShading:true,roughness:1}),
       ];
       const stoneMats = [
-        new THREE.MeshStandardMaterial({color:0x5a6063,flatShading:true,roughness:1}),
-        new THREE.MeshStandardMaterial({color:0x6d706d,flatShading:true,roughness:1}),
-        new THREE.MeshStandardMaterial({color:0x42494f,flatShading:true,roughness:1}),
+        new THREE.MeshStandardMaterial({color:0x75604b,flatShading:true,roughness:1}),
+        new THREE.MeshStandardMaterial({color:0x8d7556,flatShading:true,roughness:1}),
+        new THREE.MeshStandardMaterial({color:0x4b3d38,flatShading:true,roughness:1}),
       ];
-      const glowMat = new THREE.MeshStandardMaterial({color:0x82eced,emissive:0x218f9a,emissiveIntensity:1.15,roughness:.42,metalness:.08,flatShading:true});
-      const warmGlow = new THREE.MeshStandardMaterial({color:0xe4b46d,emissive:0x8a4f1c,emissiveIntensity:.75,roughness:.6,flatShading:true});
-      const darkStone = new THREE.MeshStandardMaterial({color:0x262b30,roughness:1,flatShading:true});
-      // ひとつの大きな岩盤殻で全区画を包み、遠くの天井と壁が続いて見えるようにする。
+      const glowMat = new THREE.MeshStandardMaterial({color:0xffd37a,emissive:0xaa5617,emissiveIntensity:1.15,roughness:.42,metalness:.08,flatShading:true});
+      const warmGlow = new THREE.MeshStandardMaterial({color:0xffc26b,emissive:0x9a4317,emissiveIntensity:.75,roughness:.6,flatShading:true});
+      const darkStone = new THREE.MeshStandardMaterial({color:0x302327,roughness:1,flatShading:true});
       const shellGeo = new THREE.SphereGeometry(1,32,20);
       const shell = new THREE.Mesh(shellGeo, new THREE.MeshStandardMaterial({color:0x343a41,roughness:1,flatShading:true,side:THREE.BackSide}));
       shell.scale.set(124,43,145); shell.position.set(0,18,-97); s.add(shell);
@@ -2195,7 +2184,9 @@ window.startGame = function(NETINIT){
         for(let i=0;i<area.n;i++){
           const a=Math.random()*Math.PI*2, r=Math.sqrt(Math.random())*(area.z===-81?15:area.z===-184?23:area.z===-32?13:16);
           const m=new THREE.Mesh(tileGeo,stoneMats[Math.floor(Math.random()*stoneMats.length)]);
-          const tx=area.x+Math.cos(a)*r,tz=area.z+Math.sin(a)*r*.68; m.position.set(tx,rogueFloorHeight(tx,tz)-.045,tz); m.rotation.y=(Math.random()-.5)*.5; s.add(m);
+          const tx=area.x+Math.cos(a)*r,tz=area.z+Math.sin(a)*r*.68;
+          if(area.z===-81&&((tx/8.3)**2+((tz+82)/4.8)**2)<=1.08) continue;
+          m.position.set(tx,rogueFloorHeight(tx,tz)-.045,tz); m.rotation.y=(Math.random()-.5)*.5; s.add(m);
         }
       }
       // 各広間の縁を天然岩で囲む。通路と分岐の入口は空け、歩ける幅より外側に配置する。
@@ -2220,7 +2211,7 @@ window.startGame = function(NETINIT){
         }
         rogueRockBatches.clear();
       }
-      // v65では裂け目を廃止。中央広間から後方へ床面が連続する。
+      // v67: 中央広間の裂け目と左右の脇部屋は、上の共有地形定義から同じ形で生成する。
       function rockRim(cx,cz,rx,rz,n,floorY=0){
         for(let i=0;i<n;i++){
           const a=(i/n)*Math.PI*2+(Math.random()-.5)*.13;
@@ -2236,7 +2227,16 @@ window.startGame = function(NETINIT){
         }
       }
       rockRim(0,12,19,16,26,0); rockRim(0,-37,23,16,30,0); rockRim(0,-83,36,16,40,0);
+      rockRim(-53,-82,14,12,22,0); rockRim(53,-82,14,12,22,0);
       rockRim(0,-137,27,18,34,-1.2); rockRim(0,-184,35,20,44,-1.2);
+      // A visible low floor at the bottom emphasizes the central hole while remaining non-walkable.
+      const branchPitGeo=new THREE.CircleGeometry(1,40); branchPitGeo.rotateX(-Math.PI/2);
+      const branchPit=new THREE.Mesh(branchPitGeo,new THREE.MeshStandardMaterial({color:0x111923,roughness:1,flatShading:true,side:THREE.DoubleSide}));
+      branchPit.scale.set(8.1,1,4.6); branchPit.position.set(0,-4.4,-82); s.add(branchPit);
+      for(let i=0;i<12;i++){
+        const a=(i/12)*Math.PI*2, x=Math.cos(a)*10.7, z=-82+Math.sin(a)*6.5;
+        addRock(x,.18,z,.8+(i%3)*.15,.65+(i%2)*.2,.9,rockMats[i%rockMats.length]);
+      }
       // 通路上の崩落岩は左右へ寄せ、プレイヤーが真ん中を通れる幅を保つ。
       for(const seg of [
         {z:-9,len:22,w:12,za:1,zb:-24,yA:0,yB:0},
@@ -2259,7 +2259,7 @@ window.startGame = function(NETINIT){
         const shaft=new THREE.Mesh(new THREE.CylinderGeometry(wide*.42,wide*.62,h*.62,6),stoneMats[(matIndex+1)%stoneMats.length]); shaft.position.set(x,baseY+h*.56,z); shaft.castShadow=true; s.add(shaft);
         const cap=new THREE.Mesh(new THREE.BoxGeometry(wide*1.6,.42,wide*1.6),stoneMats[(matIndex+2)%stoneMats.length]); cap.position.set(x,baseY+h*.89,z); s.add(cap);
       }
-      for(const p of [[-10,-34,6,1.1,0,0],[10,-39,4.5,.9,1,0],[-27,-92,8,1.25,2,0],[25,-74,6,.9,1,0],[-8,-132,7,1.0,0,-1.2],[9,-142,5,.85,2,-1.2],[-18,-181,9,1.4,1,-1.2],[18,-187,8,1.2,0,-1.2]]) addPillar(...p);
+      for(const p of [[-10,-34,6,1.1,0,0],[10,-39,4.5,.9,1,0],[-27,-92,8,1.25,2,0],[25,-74,6,.9,1,0],[-52,-84,6,1.0,1,0],[52,-80,7,1.0,0,0],[-8,-132,7,1.0,0,-1.2],[9,-142,5,.85,2,-1.2],[-18,-181,9,1.4,1,-1.2],[18,-187,8,1.2,0,-1.2]]) addPillar(...p);
       // 巨大な鍾乳石。上部の暗い天井と高さを示し、地形を狭く見せない。
       const stalactiteGeo=new THREE.ConeGeometry(1,1,5);
       for(let i=0;i<34;i++){
@@ -2270,7 +2270,7 @@ window.startGame = function(NETINIT){
       }
       // 結晶群を主な広間と分岐の奥へ。発光材は共有してドローコールとメモリ負荷を抑える。
       const crystalGeo=new THREE.ConeGeometry(1,1,5);
-      for(const spot of [[-11,-31],[13,-42],[-27,-79],[25,-91],[-13,-131],[12,-144],[-20,-190],[19,-177]]){
+      for(const spot of [[-11,-31],[13,-42],[-27,-79],[25,-91],[-54,-81],[54,-84],[-13,-131],[12,-144],[-20,-190],[19,-177]]){
         const count=3+Math.floor(Math.random()*3);
         for(let j=0;j<count;j++){
           const h=.8+Math.random()*2.4, r=.18+Math.random()*.18;
@@ -2279,7 +2279,7 @@ window.startGame = function(NETINIT){
         }
       }
       // 明かりは主要区画にのみ設置。
-      for(const l of [[0,9,-34,0x91e4e9],[0,10,-82,0x77d5dd],[0,8,-137,0x77d5dd],[0,9,-184,0xeca7ff]]){
+      for(const l of [[0,9,-34,0xffc16b],[0,10,-82,0xff974b],[0,8,-137,0xffb55f],[0,9,-184,0xef8b59]]){
         const pl=new THREE.PointLight(l[3],1.5,37,2); pl.position.set(l[0],l[1],l[2]); s.add(pl);
       }
       // 石の封印門。閉じている間はクライアントの歩行範囲判定も同じ場所で止める。
@@ -2513,6 +2513,8 @@ window.startGame = function(NETINIT){
 
   const ROGUE_ENEMY_MATS={
     shade:new THREE.MeshStandardMaterial({color:0x4b607b,emissive:0x182f52,emissiveIntensity:.4,flatShading:true,roughness:.85}),
+    shadeMantle:new THREE.MeshStandardMaterial({color:0x28384f,emissive:0x0b1b31,emissiveIntensity:.32,flatShading:true,roughness:.92}),
+    shadeEdge:new THREE.MeshStandardMaterial({color:0x7895ad,emissive:0x163a50,emissiveIntensity:.48,flatShading:true,roughness:.72}),
     crawler:new THREE.MeshStandardMaterial({color:0x9a5a43,emissive:0x35140d,emissiveIntensity:.25,flatShading:true,roughness:.9}),
     spitter:new THREE.MeshStandardMaterial({color:0x397b83,emissive:0x146c72,emissiveIntensity:.45,flatShading:true,roughness:.72}),
     charger:new THREE.MeshStandardMaterial({color:0x9b5837,emissive:0x5a2414,emissiveIntensity:.35,flatShading:true,roughness:.88}),
@@ -2527,7 +2529,11 @@ window.startGame = function(NETINIT){
     head:new THREE.DodecahedronGeometry(.42,0), bossHead:new THREE.DodecahedronGeometry(.62,0),
     arm:new THREE.ConeGeometry(.28,1.2,5), bossArm:new THREE.ConeGeometry(.48,1.9,5),
     bossSpike:new THREE.ConeGeometry(.28,.95,5), chargerHorn:new THREE.ConeGeometry(.24,.78,5),
-    spitterCore:new THREE.OctahedronGeometry(.32,0), eye:new THREE.OctahedronGeometry(.11,0)
+    spitterCore:new THREE.OctahedronGeometry(.32,0), eye:new THREE.OctahedronGeometry(.11,0),
+    shadeUpperArm:new THREE.ConeGeometry(.18,.64,5), shadeForearm:new THREE.ConeGeometry(.145,.52,5),
+    shadeThigh:new THREE.ConeGeometry(.135,.42,5), shadeShin:new THREE.ConeGeometry(.105,.36,5),
+    shadeJoint:new THREE.DodecahedronGeometry(.16,0), shadeFoot:new THREE.DodecahedronGeometry(.14,0),
+    shadeClaw:new THREE.ConeGeometry(.045,.20,4), shadeCrest:new THREE.ConeGeometry(.14,.36,5)
   };
   const ROGUE_ATTACK_WARNING_GEO=new THREE.TorusGeometry(1,.055,4,28);
   const ROGUE_ATTACK_WARNING_MATS={
@@ -2610,12 +2616,54 @@ window.startGame = function(NETINIT){
   function makeRogueEnemy(kind,x,z,hp,stage,boss,optional=false,rogueId=''){
     const g=new THREE.Group();
     const mat=boss?ROGUE_ENEMY_MATS.boss:(ROGUE_ENEMY_MATS[kind]||ROGUE_ENEMY_MATS.shade);
+    let visualRig=null;
     if(kind==='crawler'){
       const body=new THREE.Mesh(ROGUE_GEOMETRIES.crawlerBody,mat); body.position.y=.72; body.scale.set(1.15,.72,1.3); g.add(body);
       for(let i=0;i<6;i++){
         const leg=new THREE.Mesh(ROGUE_GEOMETRIES.crawlerLeg,mat); const a=i/6*Math.PI*2;
         leg.position.set(Math.cos(a)*.67,.32,Math.sin(a)*.68); leg.rotation.z=Math.cos(a)*.8; leg.rotation.x=Math.sin(a)*.55; g.add(leg);
       }
+    }else if(kind==='shade'&&!boss){
+      // シェイド専用の簡易リグ。敵AI・攻撃判定は従来どおりで、ここは見た目だけを動かす。
+      const body=new THREE.Group();g.add(body);
+      const torso=new THREE.Mesh(ROGUE_GEOMETRIES.body,mat);torso.position.set(0,1.15,.02);torso.scale.set(.66,.88,.49);body.add(torso);
+      const mantle=new THREE.Mesh(ROGUE_GEOMETRIES.head,ROGUE_ENEMY_MATS.shadeMantle);mantle.position.set(0,1.30,.20);mantle.scale.set(1.26,.92,.7);body.add(mantle);
+      for(const side of [-1,1]){
+        const shoulderPlate=new THREE.Mesh(ROGUE_GEOMETRIES.shadeJoint,ROGUE_ENEMY_MATS.shadeMantle);
+        shoulderPlate.position.set(side*.49,1.51,.005);shoulderPlate.scale.set(1.25,.82,.9);body.add(shoulderPlate);
+      }
+      const head=new THREE.Group();head.position.set(0,1.82,-.12);body.add(head);
+      const skull=new THREE.Mesh(ROGUE_GEOMETRIES.head,ROGUE_ENEMY_MATS.shadeMantle);skull.position.set(0,.06,0);skull.scale.set(.88,1.10,.82);head.add(skull);
+      const crest=new THREE.Mesh(ROGUE_GEOMETRIES.shadeCrest,ROGUE_ENEMY_MATS.shadeMantle);crest.position.set(0,.39,.025);head.add(crest);
+      const eyeL=new THREE.Mesh(ROGUE_EYE_GEO,ROGUE_ENEMY_MATS.eye),eyeR=eyeL.clone();
+      eyeL.position.set(-.13,.065,-.285);eyeR.position.set(.13,.065,-.285);eyeL.scale.set(.95,.8,.72);eyeR.scale.copy(eyeL.scale);head.add(eyeL,eyeR);
+      const eyeGlowL=new THREE.Mesh(ROGUE_GEOMETRIES.eye,ROGUE_ENEMY_MATS.shadeEdge),eyeGlowR=eyeGlowL.clone();
+      eyeGlowL.scale.set(1.55,1.25,.45);eyeGlowR.scale.copy(eyeGlowL.scale);eyeGlowL.position.set(-.13,.065,-.31);eyeGlowR.position.set(.13,.065,-.31);head.add(eyeGlowL,eyeGlowR);
+      const arms={},legs=[];
+      for(const side of [-1,1]){
+        const shoulder=new THREE.Group();shoulder.position.set(side*.43,1.48,-.015);body.add(shoulder);
+        const upper=new THREE.Mesh(ROGUE_GEOMETRIES.shadeUpperArm,mat);upper.position.set(side*.018,-.30,0);upper.rotation.z=side*.12;shoulder.add(upper);
+        const elbow=new THREE.Group();elbow.position.set(side*.025,-.565,-.005);shoulder.add(elbow);
+        const forearm=new THREE.Mesh(ROGUE_GEOMETRIES.shadeForearm,mat);forearm.position.set(0,-.235,-.015);forearm.rotation.z=side*.06;elbow.add(forearm);
+        const hand=new THREE.Mesh(ROGUE_GEOMETRIES.shadeJoint,ROGUE_ENEMY_MATS.shadeMantle);hand.position.set(0,-.475,-.045);hand.scale.set(.78,.82,.72);elbow.add(hand);
+        for(const clawSide of [-1,0,1]){
+          const claw=new THREE.Mesh(ROGUE_GEOMETRIES.shadeClaw,ROGUE_ENEMY_MATS.shadeEdge);
+          claw.position.set(clawSide*.07,-.55,-.10);claw.rotation.x=-Math.PI/2;claw.rotation.z=clawSide*.12;elbow.add(claw);
+        }
+        arms[side]={shoulder,elbow};
+        const hip=new THREE.Group();hip.position.set(side*.22,.69,.045);body.add(hip);
+        const thigh=new THREE.Mesh(ROGUE_GEOMETRIES.shadeThigh,mat);thigh.position.y=-.19;thigh.rotation.z=side*.05;hip.add(thigh);
+        const knee=new THREE.Group();knee.position.set(0,-.30,-.005);hip.add(knee);
+        const shin=new THREE.Mesh(ROGUE_GEOMETRIES.shadeShin,ROGUE_ENEMY_MATS.shadeMantle);shin.position.y=-.155;knee.add(shin);
+        const foot=new THREE.Mesh(ROGUE_GEOMETRIES.shadeFoot,mat);foot.position.set(0,-.31,-.075);foot.scale.set(.85,.48,1.2);knee.add(foot);
+        legs.push({hip,knee,side,phase:side<0?0:Math.PI});
+      }
+      // 背中の短い結晶状の突起で、正面・背面のシルエットを区別しやすくする。
+      for(let i=0;i<3;i++){
+        const shard=new THREE.Mesh(ROGUE_GEOMETRIES.shadeCrest,ROGUE_ENEMY_MATS.shadeEdge);
+        shard.position.set((i-1)*.22,1.42,.39);shard.rotation.x=-.35;shard.rotation.z=(i-1)*-.22;shard.scale.set(.62,.72,.62);body.add(shard);
+      }
+      visualRig={body,torso,head,arms,legs,gaitPhase:Math.random()*Math.PI*2,phase:'idle',phaseTime:0};
     }else{
       const body=new THREE.Mesh(boss?ROGUE_GEOMETRIES.bossBody:ROGUE_GEOMETRIES.body,mat); body.position.y=boss?1.65:1.0; body.scale.set(1,boss?1.35:1.12,.9); body.castShadow=true; g.add(body);
       const head=new THREE.Mesh(boss?ROGUE_GEOMETRIES.bossHead:ROGUE_GEOMETRIES.head,mat); head.position.set(0,boss?2.85:1.85,-.18); g.add(head);
@@ -2640,7 +2688,43 @@ window.startGame = function(NETINIT){
     const warningType=kind==='spitter'?'projectile':kind==='charger'?'charge':(kind==='sentinel'||boss)?'slam':'melee';
     const warningMesh=new THREE.Mesh(ROGUE_ATTACK_WARNING_GEO,ROGUE_ATTACK_WARNING_MATS[warningType]);
     warningMesh.rotation.x=-Math.PI/2;warningMesh.position.set(x,rogueFloorHeight(x,z)+.065,z);warningMesh.visible=false;warningMesh.renderOrder=4;sceneRef.add(warningMesh);
-    return {kind,x,z,targetX:x,targetZ:z,targetYaw:0,hp,maxHp:hp,stage,boss:!!boss,optional:!!optional,rogueId,mesh:g,warningMesh,phase:'idle',attackMode:'',aimX:x,aimZ:z,attackRadius:1.5,cooldown:1+Math.random(),dying:false,dieT:0,flash:0};
+    return {kind,x,z,targetX:x,targetZ:z,targetYaw:0,hp,maxHp:hp,stage,boss:!!boss,optional:!!optional,rogueId,mesh:g,warningMesh,visualRig,phase:'idle',attackMode:'',aimX:x,aimZ:z,attackRadius:1.5,cooldown:1+Math.random(),dying:false,dieT:0,flash:0};
+  }
+  function updateRogueEnemyVisual(e,dt){
+    const rig=e&&e.visualRig;if(!rig)return;
+    if(rig.phase!==e.phase){rig.phase=e.phase;rig.phaseTime=0;}
+    rig.phaseTime+=Math.max(0,Math.min(.08,dt));
+    const t=performance.now()*.001;
+    const lag=Math.hypot((e.targetX||0)-e.mesh.position.x,(e.targetZ||0)-e.mesh.position.z);
+    const moving=Math.max(0,Math.min(1,(lag-.008)*5.2));
+    rig.gaitPhase+=dt*(3.4+moving*8.5);
+    const gait=Math.sin(rig.gaitPhase);
+    const windup=e.phase==='windup'?Math.min(1,rig.phaseTime/.16):(e.phase==='charge'?1:0);
+    const strike=e.phase==='recover'?Math.max(0,1-rig.phaseTime/.19):0;
+    const recovery=e.phase==='recover'?Math.max(0,1-rig.phaseTime/.34):0;
+    const impact=Math.max(0,Math.min(1,(e.flash||0)/.22));
+    const body=rig.body;
+    body.position.y=.018+Math.sin(t*2.35+(e.rogueId.length||0))*.018+Math.abs(gait)*.028*moving-windup*.035+strike*.025;
+    body.rotation.x=.018*Math.sin(rig.gaitPhase*2)*moving-windup*.13+strike*.17+impact*.06;
+    body.rotation.z=.018*Math.sin(t*1.7)*(.35+moving)+impact*.12;
+    rig.torso.rotation.x=.012*Math.sin(t*2.1)+moving*Math.sin(rig.gaitPhase*2)*.018-windup*.04+strike*.08;
+    rig.torso.rotation.z=.02*Math.sin(t*1.4)+impact*.08;
+    rig.head.rotation.x=.035*Math.sin(t*1.8)*(1-moving)-windup*.11+strike*.12-impact*.12;
+    rig.head.rotation.y=Math.sin(t*.72+(e.rogueId.length||0))*(.035+.035*(1-moving));
+    for(const leg of rig.legs){
+      const swing=Math.sin(rig.gaitPhase+leg.phase)*.42*moving;
+      leg.hip.rotation.x=swing+windup*(leg.side<0?.11:-.06)+strike*(leg.side<0?-.10:.14);
+      leg.hip.rotation.z=leg.side*(.018*moving*Math.cos(rig.gaitPhase+leg.phase)+impact*.06);
+      leg.knee.rotation.x=Math.max(0,-swing)*.62+strike*.08;
+    }
+    for(const side of [-1,1]){
+      const arm=rig.arms[side];if(!arm)continue;
+      const idleSwing=Math.sin(rig.gaitPhase+(side<0?0:Math.PI))*.20*moving;
+      const attackBias=side>0?1:.68;
+      arm.shoulder.rotation.x=idleSwing-windup*(.72*attackBias)+strike*(1.08*attackBias)+impact*.22;
+      arm.shoulder.rotation.z=side*(.12+.035*Math.sin(t*1.6)+moving*.05);
+      arm.elbow.rotation.x=-.12-windup*.12+strike*.28+impact*.16;
+    }
   }
   function makeRogueChest(x,z){
     const g=new THREE.Group();
@@ -2688,7 +2772,7 @@ window.startGame = function(NETINIT){
     for(const gate of sceneRef.userData.rogueGates||[]){gate.group.visible=true;gate.seal.visible=true;}
     if(sceneRef.userData.rogueExtractionPortal) sceneRef.userData.rogueExtractionPortal.visible=false;
     playerHp=PLAYER_MAX_HP; updatePlayerHpBar(); updateRogueHud();
-    if(!fromSync) showToast(ROGUE_DUNGEON_VARIANT==='linear'?'一本道の試作遺跡へ。敵を突破し、装備を拾い、無事に帰還せよ。':'分岐する遺跡へ。敵を突破し、装備を拾い、無事に帰還せよ。','深層探索');
+    if(!fromSync) showToast(ROGUE_DUNGEON_VARIANT==='linear'?'分岐する試作遺跡へ。左右の回廊を選び、宝箱を探して無事に帰還せよ。':'分岐する遺跡へ。敵を突破し、装備を拾い、無事に帰還せよ。','深層探索');
   }
 
   function applyRogueRoomSnapshot(m, isJoin=false){
@@ -2838,6 +2922,7 @@ window.startGame = function(NETINIT){
         e.mesh.position.y=rogueFloorHeight(e.mesh.position.x,e.mesh.position.z)+(e.boss?Math.sin(performance.now()*.003)*.08:0);
         if(e.warningMesh&&e.warningMesh.visible){e.warningMesh.position.y=rogueFloorHeight(e.warningMesh.position.x,e.warningMesh.position.z)+.065;e.warningMesh.rotation.z+=dt*0.7;}
       }
+      updateRogueEnemyVisual(e,dt);
     }
     updateRogueHud();
   }
@@ -8531,27 +8616,6 @@ window.startGame = function(NETINIT){
     renderer.setSize(innerWidth, innerHeight);
   });
 
-  // ============ 操作ヒント(PC) ============
-  // カーソルが固定されている間はマウスでボタンを押せないので、キーの一覧を出す。外れている間は戻り方を出す
-  const helpEl = document.getElementById('help');
-  let helpShown = '';
-  function updateHelp(){
-    let html;
-    if (bulkRecoverWorldSelectMode){
-      html = 'WASD 移動 / マウス位置で建築物を選択 / 右ドラッグで視点変更 / Enter まとめて回収 / Tab 一覧 / Esc 終了';
-    } else if (document.pointerLockElement === renderer.domElement){
-      html = 'WASD 移動 / Space ジャンプ / Shift ダッシュ / クリック 攻撃 / E 採集・操作<br>' +
-        'B ビルド / C 図鑑 / O 設定 / Enter チャット / 1 手を振る・2 ダンス・3 びっくり・4 ガッツポーズ / Esc カーソルを出す';
-    } else if (isMenuOpen() || chatOpen()){
-      html = 'Esc で閉じる';
-    } else {
-      html = '画面をクリックで操作に戻る / B ビルド・C 図鑑・O 設定(右上のボタンも使えます)';
-    }
-    if (html !== helpShown){ helpShown = html; helpEl.innerHTML = html; }
-  }
-  document.addEventListener('pointerlockchange', updateHelp);
-  setInterval(updateHelp, 500); // メニューの開閉でも更新する(軽い文字列の差し替えだけ)
-
   // ============ 開始オーバーレイ ============
   document.getElementById('startBtn').addEventListener('click', ()=>{
     const nameInput = document.getElementById('nameInput');
@@ -10039,7 +10103,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=66.0-independent-linear-dungeon"></script>
+<script src="shared.js?v=69.0-shade-enemy-motion"></script>
 <script src="boot.js"></script>
 </body>
 </html>

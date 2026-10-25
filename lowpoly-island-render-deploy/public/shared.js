@@ -195,13 +195,25 @@
     {type:'ellipse', x:0, z:-184, rx:35, rz:24, floorY:-5.2},
   ];
   const ROGUE_GATE_Z = [-52, -110, -158];
-  // v66: 独立した一本道ダンジョン用の床定義。旧遺跡の地形には触れない。
+  // v67: v66で追加した独立試作ダンジョンの床定義。内部キーlinearは同期互換のため維持し、地形は左右分岐型へ拡張。旧遺跡は変更しない。
   const ROGUE_LINEAR_WALK_AREAS = [
     {type:'ellipse', x:0, z:12, rx:19, rz:16, floorY:0, floorHoles:[{type:'corridor',ax:0,az:1,bx:0,bz:-24,width:12}]},
     {type:'segment', ax:0, az:1, bx:0, bz:-24, width:12, yA:0, yB:0},
     {type:'ellipse', x:0, z:-37, rx:23, rz:16, floorY:0, floorHoles:[{type:'corridor',ax:0,az:1,bx:0,bz:-24,width:12},{type:'corridor',ax:0,az:-49,bx:0,bz:-70,width:12}]},
     {type:'segment', ax:0, az:-49, bx:0, bz:-70, width:12, yA:0, yB:0},
-    {type:'ellipse', x:0, z:-83, rx:36, rz:16, floorY:0, floorHoles:[{type:'corridor',ax:0,az:-49,bx:0,bz:-70,width:12},{type:'corridor',ax:0,az:-97,bx:0,bz:-121,width:12}]},
+    {type:'ellipse', x:0, z:-83, rx:36, rz:16, floorY:0, floorHoles:[
+      {type:'corridor',ax:0,az:-49,bx:0,bz:-70,width:12},
+      {type:'corridor',ax:0,az:-97,bx:0,bz:-121,width:12},
+      // The central sinkhole makes the broad hall a real left-or-right route choice.
+      {type:'ellipse',x:0,z:-82,rx:8.3,rz:4.8},
+      // These two side alcoves are attached to the hall via their own floor segments.
+      {type:'corridor',ax:-27,az:-82,bx:-46,bz:-82,width:10},
+      {type:'corridor',ax:27,az:-82,bx:46,bz:-82,width:10}
+    ]},
+    {type:'segment', ax:-27, az:-82, bx:-46, bz:-82, width:10, yA:0, yB:0},
+    {type:'segment', ax:27, az:-82, bx:46, bz:-82, width:10, yA:0, yB:0},
+    {type:'ellipse', x:-53, z:-82, rx:14, rz:12, floorY:0, floorHoles:[{type:'corridor',ax:-27,az:-82,bx:-46,bz:-82,width:10}]},
+    {type:'ellipse', x:53, z:-82, rx:14, rz:12, floorY:0, floorHoles:[{type:'corridor',ax:27,az:-82,bx:46,bz:-82,width:10}]},
     {type:'segment', ax:0, az:-97, bx:0, bz:-103, width:12, yA:0, yB:0},
     {type:'segment', ax:0, az:-103, bx:0, bz:-121, width:12, yA:0, yB:-1.2},
     {type:'ellipse', x:0, z:-137, rx:27, rz:18, floorY:-1.2, floorHoles:[{type:'corridor',ax:0,az:-97,bx:0,bz:-121,width:12},{type:'corridor',ax:0,az:-152,bx:0,bz:-166,width:12}]},
@@ -272,7 +284,7 @@
         if(len<1e-6)continue;
         const along=((x-a.ax)*dx+(z-a.az)*dz)/len;
         const lateral=((x-a.ax)*dz-(z-a.az)*dx)/len;
-        if(along< -1e-6||along>len+1e-6||Math.abs(lateral)>a.width*.45+1e-6)continue;
+        if(along< -1e-6||along>len+1e-6||Math.abs(lateral)>a.width*(variant==='linear'?.5:.45)+1e-6)continue;
         const t=Math.max(0,Math.min(1,along/len));
         const y=(a.yA||0)+((a.yB||0)-(a.yA||0))*t;
         result.push({id:`${variant}:segment:${i}`,kind:Math.abs((a.yB||0)-(a.yA||0))>1e-5?'ramp':'segment',y,t,d:Math.abs(lateral),area:a});
@@ -291,7 +303,7 @@
     if(variant!=='linear'&&Math.abs(z+83)<4.55&&Math.abs(x)<38)return Math.abs(x)<1.48||Math.abs(x-15)<1.10;
     return areas.some(a=>{
       if(a.type==='ellipse')return rogueAreaWalkableContains(a,x,z);
-      return a.type==='segment'&&roguePointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz)<=a.width*.45;
+      return a.type==='segment'&&roguePointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz)<=a.width*(variant==='linear'?.5:.45);
     });
   }
 
@@ -429,7 +441,7 @@
     const enemies = [];
     const packs = variant==='linear' ? [
       { stage:0, kind:'shade', spots:[[-3,-31],[3,-33],[-2,-42],[2,-43]] },
-      { stage:1, kind:'crawler', spots:[[-3,-75],[3,-78],[0,-92]] },
+      { stage:1, kind:'crawler', spots:[[-3,-75],[3,-78],[0,-92]], optionalSpots:[[-53,-82],[53,-82]] },
       { stage:1, kind:'spitter', spots:[[-2,-86],[2,-91]] },
       { stage:2, kind:'sentinel', spots:[[-3,-132],[3,-132],[-2,-142],[2,-144]] },
       { stage:2, kind:'charger', spots:[[-3,-139],[3,-141]] }
@@ -451,7 +463,7 @@
         enemies.push({id:`e${enemies.length}`,kind:pack.kind,...spot,hp,stage:pack.stage,boss:false,optional:true});
       }
     }
-    const baseChests=variant==='linear' ? [[-5,-39,0],[5,-76,1],[-5,-91,1],[-5,-137,2],[5,-145,2]] : [[-8,-39,0],[-45,-68,1],[48,-98,1],[-14,-137,2],[7,-145,2]];
+    const baseChests=variant==='linear' ? [[-5,-39,0],[5,-76,1],[-5,-91,1],[-5,-137,2],[5,-145,2],[-55,-82,1],[55,-82,1]] : [[-8,-39,0],[-45,-68,1],[48,-98,1],[-14,-137,2],[7,-145,2]];
     const chests=baseChests.map(([x,z,stage])=>resolveRogueDungeonSpawn(
       x+(random()-.5)*(stage===1?2.2:2.0),z+(random()-.5)*(stage===1?3.0:2.0),stage,variant
     )).map((spot,i)=>({ ...spot,stage:baseChests[i][2] }));

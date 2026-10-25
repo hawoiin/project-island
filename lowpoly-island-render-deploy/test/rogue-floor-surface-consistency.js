@@ -1,4 +1,4 @@
-// v66.0: one shared floor/cutout definition drives rendering and movement surfaces.
+// v67.0: one shared floor/cutout definition drives rendering and movement surfaces.
 'use strict';
 const Shared=require('../public/shared.js');
 let fails=0;function check(n,ok){console.log((ok?'PASS ':'FAIL ')+n);if(!ok)fails++;}
