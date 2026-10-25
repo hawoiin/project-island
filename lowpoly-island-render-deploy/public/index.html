@@ -576,7 +576,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v64.1</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v64.3</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -1694,7 +1694,7 @@ window.startGame = function(NETINIT){
     for(const a of ROGUE_WALK_AREAS){
       if(a.type!=='ellipse')continue;
       const metric=((x-a.x)/a.rx)**2+((z-a.z)/a.rz)**2;
-      if(metric<=1.035&&metric<bestMetric){bestMetric=metric;bestEllipse=a;}
+      if(metric<=1.035&&!Shared.rogueFloorHoleContainsPoint(a,x,z)&&metric<bestMetric){bestMetric=metric;bestEllipse=a;}
     }
     if(bestEllipse)return Number.isFinite(bestEllipse.floorY)?bestEllipse.floorY:0;
     return 0;
@@ -1708,30 +1708,13 @@ window.startGame = function(NETINIT){
   const ROGUE_MAX_STEP_UP = 0.45;
   const ROGUE_AIRBORNE_FLOOR_TOLERANCE = 0.06;
   const ROGUE_MOVE_SAMPLE_SPACING = 0.30;
+  // 最深部の通常床(-5.2m)より十分下へ落ちた場合は、直前の安全な床へ戻す。
+  // 足場判定の穴で探索が永久に停止するのを防ぐ保険で、携行品は失わない。
+  const ROGUE_VOID_RECOVERY_Y = -9.0;
   function rogueFloorCandidatesAt(x,z,openGates=0){
-    if(!isRogueWalkable(x,z,openGates)) return [];
-    const ramps=[],segments=[],ellipses=[];
-    for(let i=0;i<ROGUE_WALK_AREAS.length;i++){
-      const a=ROGUE_WALK_AREAS[i];
-      if(a.type==='segment'){
-        const dx=a.bx-a.ax,dz=a.bz-a.az,len2=dx*dx+dz*dz;
-        const t=len2>1e-8?THREE.MathUtils.clamp(((x-a.ax)*dx+(z-a.az)*dz)/len2,0,1):0;
-        const d=pointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz);
-        if(d>a.width*0.45)continue;
-        const y=(a.yA||0)+((a.yB||0)-(a.yA||0))*t;
-        const surface={id:`segment:${i}`,kind:Math.abs((a.yB||0)-(a.yA||0))>1e-5?'ramp':'segment',y,t,d,area:a};
-        if(surface.kind==='ramp')ramps.push(surface);else segments.push(surface);
-      }else if(a.type==='ellipse'){
-        // 上下階が重なる場所では、プレイヤーが今立っている階の床も候補に残す。
-        // 歩行可能領域の縮小半径ではなく、実際に描画する部屋床の半径に合わせる。
-        const metric=((x-a.x)/a.rx)**2+((z-a.z)/a.rz)**2;
-        if(metric<=1.035){ellipses.push({id:`ellipse:${i}`,kind:'ellipse',y:Number.isFinite(a.floorY)?a.floorY:0,metric,area:a});}
-      }
-    }
-    // 上下に重なった床を候補から捨てず、現在どの高さにいるかをもとに選択する。
-    // 坂を無条件に優先すると、低い床の上に投影上重なった坂へ吸い上げられるため、
-    // 傾斜面・平坦通路・部屋床をすべて候補として返す。
-    return [...ramps,...segments,...ellipses];
+    if(!isRogueWalkable(x,z,openGates))return [];
+    // 描画用と同じ共有地形定義から床候補を取得し、切り欠きや橋の定義を二重管理しない。
+    return Shared.getRogueDungeonFloorCandidates(x,z,openGates);
   }
   function rogueChooseConnectedFloor(candidates,referenceY,footY,airborne,preferredSurfaceId=null){
     if(!Array.isArray(candidates)||!candidates.length)return null;
@@ -1771,8 +1754,10 @@ window.startGame = function(NETINIT){
     const preferredId=isCurrentPosition&&rogueRun?rogueRun.playerFloorSurfaceId:null;
     const surface=rogueChooseConnectedFloor(candidates,footY,footY,!grounded,preferredId);
     if(isCurrentPosition&&rogueRun&&surface)rogueRun.playerFloorSurfaceId=surface.id;
-    // 制約処理前の一時座標などで候補がない場合に限り従来値を使う。
-    return surface?surface.y:rogueFloorHeight(x,z);
+    // 接続した床候補がない時、座標だけから推測した高さを返すと、存在しない床で
+    // 着地判定が行われたり、床の下へ落ちた後に本当の床へ戻れなくなる。
+    // null は「この位置で今の足元から接続できる床がない」を意味し、物理側で落下・救済する。
+    return surface?surface.y:null;
   }
   // カメラはプレイヤー本体より室内を広く映すため、歩行用の安全マージン外でも
   // 実際の床・坂が近ければその高さを使う。ただし裂け目の底なし区間は床なし扱い。
@@ -1915,19 +1900,14 @@ window.startGame = function(NETINIT){
       }
       for(const a of ROGUE_WALK_AREAS){
         if(a.type==='ellipse'){
-          const floorCuts=[];
-          if(a.x===0&&a.z===-83){
-            floorCuts.push({x:0,z:0,rx:35.5,rz:4.55}); // 中央の大亀裂
-            // 低地へ潜る下り坂の上に広間床がかぶらないよう、床側にも通路の切り欠きを作る。
-            floorCuts.push(rogueCorridorFloorSlot(15,-90,30,-95,9.2,.6,5.2,{cx:a.x,cz:a.z,rx:a.rx,rz:a.rz}));
-            floorCuts.push(rogueCorridorFloorSlot(0,-103,0,-121,10.8,.5,6.8,{cx:a.x,cz:a.z,rx:a.rx,rz:a.rz}));
-          }
-          if(a.x===0&&a.z===-137){
-            // さらに深い階層へ下がる坂を、上段の床が塞いで見えないようにする。
-            floorCuts.push(rogueCorridorFloorSlot(0,-152,0,-166,10.8,.5,4.0,{cx:a.x,cz:a.z,rx:a.rx,rz:a.rz}));
-          }
+          // 切り欠きは共有地形データを参照し、描画と移動判定で同じ定義を使う。
+          const floorCuts=(a.floorHoles||[]).map(h=>{
+            if(h.type==='ellipse')return {x:h.x-a.x,z:h.z-a.z,rx:h.rx,rz:h.rz};
+            if(h.type==='corridor')return rogueCorridorFloorSlot(h.ax,h.az,h.bx,h.bz,h.width,h.extendStart||0,h.extendEnd||0,{cx:a.x,cz:a.z,rx:a.rx,rz:a.rz});
+            return null;
+          }).filter(Boolean);
           addEllipseFloor(a.x,a.z,a.rx,a.rz,Math.random()<.22?1:Math.random()<.25?2:0,Number.isFinite(a.floorY)?a.floorY:0,floorCuts);
-        } else addCorridorFloor(a.ax,a.az,a.bx,a.bz,a.width,a.yA||0,a.yB||0);
+        } else if(a.type==='segment') addCorridorFloor(a.ax,a.az,a.bx,a.bz,a.width,a.yA||0,a.yB||0);
       }
       // 古代の石畳。均一なタイル床にせず、ひび割れたパネルを要所へだけ置く。
       const tileGeo=new THREE.BoxGeometry(2.4,.1,1.25);
@@ -2451,7 +2431,10 @@ window.startGame = function(NETINIT){
     const layout=Shared.getRogueDungeonLayout(Number.isInteger(seed)?seed:(Math.floor(Math.random()*4294967296)>>>0));
     // 同じ探索ランの全参加者が同じseed/配置を使う。装備・欠片は各プレイヤー別。
     RogueProgression.beginRun(rogueProgress,localStorage);
-    rogueRun={active:true,runNo:rogueRunCount,seed:layout.seed,instanceId:0,stage:0,openGates:0,shards:0,weaponBonus:rogueProgress.equipped.weaponBonus,armorBonus:rogueProgress.equipped.armorBonus,enemies:[],chests:[],recoveryBags:[],boss:null,lastPos:{x:0,z:Shared.CAVE_INTERIOR_ENTRY.z},extractReady:false,lastCarrySyncAt:0};
+    rogueRun={active:true,runNo:rogueRunCount,seed:layout.seed,instanceId:0,stage:0,openGates:0,shards:0,weaponBonus:rogueProgress.equipped.weaponBonus,armorBonus:rogueProgress.equipped.armorBonus,enemies:[],chests:[],recoveryBags:[],boss:null,lastPos:{x:player.position.x,z:player.position.z},lastSafePos:{x:player.position.x,y:INTERIOR_FLOOR_Y,z:player.position.z,surfaceId:null},extractReady:false,lastCarrySyncAt:0};
+    const entryCandidates=rogueFloorCandidatesAt(player.position.x,player.position.z,0);
+    const entrySurface=rogueChooseConnectedFloor(entryCandidates,player.position.y,player.position.y,false,null);
+    if(entrySurface){rogueRun.lastSafePos={x:player.position.x,y:entrySurface.y,z:player.position.z,surfaceId:entrySurface.id};rogueRun.playerFloorSurfaceId=entrySurface.id;}
     for(const en of layout.enemies){
       rogueRun.enemies.push(makeRogueEnemy(en.kind,en.x,en.z,en.hp,en.stage,false,en.optional,en.id));
     }
@@ -2730,9 +2713,12 @@ window.startGame = function(NETINIT){
 
   // プレイヤーの足場の高さ(洞窟内は平らな床、屋外は地表)
   function getPlayerFloor(x, z){
-    if (inCaveIndex===ROGUE_DUNGEON_INDEX) return { y: roguePlayerFloorHeight(x,z), inCave:true };
-    if (inCaveIndex >= 0) return { y: INTERIOR_FLOOR_Y, inCave:true };
-    return { y: islandHeight(x, z), inCave:false };
+    if (inCaveIndex===ROGUE_DUNGEON_INDEX){
+      const y=roguePlayerFloorHeight(x,z);
+      return { y, inCave:true, hasFloor:Number.isFinite(y) };
+    }
+    if (inCaveIndex >= 0) return { y: INTERIOR_FLOOR_Y, inCave:true, hasFloor:true };
+    return { y: islandHeight(x, z), inCave:false, hasFloor:true };
   }
 
   // ============ 巨像(ワンダと巨像風のボス) ============
@@ -7692,7 +7678,10 @@ window.startGame = function(NETINIT){
     const dist = 3.2;
     const px = player.position.x + Math.sin(player.rotation.y) * dist;
     const pz = player.position.z + Math.cos(player.rotation.y) * dist;
-    const py = getPlayerFloor(px, pz).y;
+    const floorInfo = getPlayerFloor(px, pz);
+    // ゴースト表示だけは床のない位置でも描画できるように見た目用高さへ退避する。
+    // プレイヤー物理の接地判定にはこのフォールバックを使わない。
+    const py = Number.isFinite(floorInfo.y) ? floorInfo.y : (inCaveIndex===ROGUE_DUNGEON_INDEX ? rogueFloorHeight(px,pz) : INTERIOR_FLOOR_Y);
     const requestedRy = player.rotation.y + placing.rot;
     // 柵は既存柵の端へ吸着。連続配置中は始点を記憶し、最後の隙間を埋められるなら閉じる形でプレビューする。
     const snapped = Shared.snapBuildPlacement(placing.def.id, px, py, pz, requestedRy, structureData.values(), placing.def.id === 'fence' ? fenceChain : null);
@@ -7834,6 +7823,9 @@ window.startGame = function(NETINIT){
     const floor = getPlayerFloor(player.position.x, player.position.z);
     insideCave = floor.inCave;
     let groundY = floor.y;
+    const isRogueDungeonFloor = inCaveIndex===ROGUE_DUNGEON_INDEX;
+    const hasRogueDungeonFloor = !isRogueDungeonFloor || floor.hasFloor !== false;
+    if (isRogueDungeonFloor && !hasRogueDungeonFloor) grounded=false;
     if (!insideCave){
       const floorCandidate = findStandableFloor(player.position.x, player.position.y, player.position.z);
       if (floorCandidate && floorCandidate.y > groundY) groundY = floorCandidate.y;
@@ -7844,22 +7836,24 @@ window.startGame = function(NETINIT){
       landSquash = 0.6; // 踏み切りの瞬間、着地と同じ「つぶれ」を軽くかけて予備動作にする
       sfx.jump();
     }
-    const isRogueDungeonFloor = inCaveIndex===ROGUE_DUNGEON_INDEX;
     // ダンジョンでは、接続した床面上の小さな高低差は足元を追従させる。
     // 大きく低い床へ出た場合は接地を解除し、瞬時に落とさず重力で落下させる。
-    if(isRogueDungeonFloor && grounded){
+    if(isRogueDungeonFloor && hasRogueDungeonFloor && grounded){
       const floorDelta=groundY-player.position.y;
       if(Math.abs(floorDelta)<=ROGUE_MAX_STEP_UP+1e-6){player.position.y=groundY;vy=0;}
       else grounded=false;
+    }else if(isRogueDungeonFloor&&!hasRogueDungeonFloor){
+      // 有効な接続床がない位置では推測した高さに接地させず、落下状態にする。
+      grounded=false;
     }
     const yBeforeGravity=player.position.y;
     vy += GRAV * dt;
     player.position.y += vy * dt;
     wasGrounded = grounded;
     if(isRogueDungeonFloor){
-      if(grounded && player.position.y<=groundY){
+      if(hasRogueDungeonFloor && grounded && player.position.y<=groundY){
         player.position.y=groundY;vy=0;grounded=true;
-      }else if(!grounded && vy<=0 && yBeforeGravity>=groundY-1e-4 && player.position.y<=groundY){
+      }else if(hasRogueDungeonFloor && !grounded && vy<=0 && yBeforeGravity>=groundY-1e-4 && player.position.y<=groundY){
         // 空中では上昇中や床の下からではなく、上から実際に床面を横切った時だけ着地する。
         player.position.y=groundY;vy=0;grounded=true;
       }else grounded=false;
@@ -7872,6 +7866,39 @@ window.startGame = function(NETINIT){
       landSquash = 1; // 着地の瞬間
       spawnDust(new THREE.Vector3(player.position.x, groundY, player.position.z), 7, 2.2, 0.5);
       sfx.land();
+    }
+
+    if(isRogueDungeonFloor && rogueRun){
+      if(player.position.y < ROGUE_VOID_RECOVERY_Y){
+        // 物理判定の綻びで床より下へ落ち切っても、死亡扱い・携行品ロストにはせず、
+        // 直前に実際に立っていた床へ戻す。探索不能になるより安全に続行できることを優先する。
+        let safe=rogueRun.lastSafePos;
+        const safeIsValid=safe&&Number.isFinite(safe.x)&&Number.isFinite(safe.y)&&Number.isFinite(safe.z)&&
+          isRogueWalkable(safe.x,safe.z,rogueRun.openGates)&&rogueFloorCandidatesAt(safe.x,safe.z,rogueRun.openGates).length>0;
+        if(!safeIsValid){
+          const sx=Shared.CAVE_INTERIOR_ENTRY.x,sz=Shared.CAVE_INTERIOR_ENTRY.z;
+          const candidates=rogueFloorCandidatesAt(sx,sz,rogueRun.openGates);
+          const surface=rogueChooseConnectedFloor(candidates,INTERIOR_FLOOR_Y,INTERIOR_FLOOR_Y,false,null);
+          safe={x:sx,y:surface?surface.y:INTERIOR_FLOOR_Y,z:sz,surfaceId:surface?surface.id:null};
+        }
+        player.position.set(safe.x,safe.y,safe.z);
+        rogueRun.lastPos={x:safe.x,z:safe.z};
+        rogueRun.playerFloorSurfaceId=safe.surfaceId||null;
+        rogueRun.lastSafePos={x:safe.x,y:safe.y,z:safe.z,surfaceId:safe.surfaceId||null};
+        vy=0;grounded=true;wasGrounded=true;camSnap=true;
+        hurtKnock.x=0;hurtKnock.z=0;playerInvuln=Math.max(playerInvuln,1.0);
+        showToast('足場のない場所から直前の安全な床へ戻りました。携行品は失っていません。','探索補助');
+      }else if(hasRogueDungeonFloor && grounded && Number.isFinite(groundY) &&
+          isRogueWalkable(player.position.x,player.position.z,rogueRun.openGates) &&
+          Math.abs(player.position.y-groundY)<=0.12){
+        const candidates=rogueFloorCandidatesAt(player.position.x,player.position.z,rogueRun.openGates);
+        const landedSurface=rogueChooseConnectedFloor(candidates,groundY,player.position.y,false,rogueRun.playerFloorSurfaceId||null);
+        if(landedSurface){
+          rogueRun.lastSafePos={x:player.position.x,y:landedSurface.y,z:player.position.z,surfaceId:landedSurface.id};
+          rogueRun.lastPos={x:player.position.x,z:player.position.z};
+          rogueRun.playerFloorSurfaceId=landedSurface.id;
+        }
+      }
     }
 
     // --- モーション: 歩行・ジャンプ・着地を手足に反映 ---
@@ -9769,7 +9796,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=64.1-single-position-constraint"></script>
+<script src="shared.js?v=64.3-unified-floor-surfaces"></script>
 <script src="boot.js"></script>
 </body>
 </html>

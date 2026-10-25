@@ -173,13 +173,19 @@
     {type:'segment', ax:0, az:1, bx:0, bz:-24, width:11, yA:0, yB:0},
     {type:'ellipse', x:0, z:-37, rx:23, rz:16, floorY:0},
     {type:'segment', ax:0, az:-49, bx:0, bz:-63, width:10, yA:0, yB:0},
-    {type:'ellipse', x:0, z:-83, rx:36, rz:25, floorY:0},
+    {type:'ellipse', x:0, z:-83, rx:36, rz:25, floorY:0, floorHoles:[
+      {type:'ellipse',x:0,z:-83,rx:35.5,rz:4.55},
+      {type:'corridor',ax:15,az:-90,bx:30,bz:-95,width:9.2,extendStart:.6,extendEnd:5.2},
+      {type:'corridor',ax:0,az:-103,bx:0,bz:-121,width:10.8,extendStart:.5,extendEnd:6.8}
+    ]},
     {type:'segment', ax:-14, az:-78, bx:-29, bz:-69, width:8.5, yA:0, yB:3.8},
     {type:'ellipse', x:-42, z:-66, rx:15, rz:13, floorY:3.8},
     {type:'segment', ax:15, az:-90, bx:30, bz:-95, width:8.5, yA:0, yB:-2.6},
     {type:'ellipse', x:44, z:-97, rx:16, rz:14, floorY:-2.6},
     {type:'segment', ax:0, az:-103, bx:0, bz:-121, width:10, yA:0, yB:-1.4},
-    {type:'ellipse', x:0, z:-137, rx:27, rz:18, floorY:-1.4},
+    {type:'ellipse', x:0, z:-137, rx:27, rz:18, floorY:-1.4, floorHoles:[
+      {type:'corridor',ax:0,az:-152,bx:0,bz:-166,width:10.8,extendStart:.5,extendEnd:4.0}
+    ]},
     {type:'segment', ax:0, az:-152, bx:0, bz:-166, width:10, yA:-1.4, yB:-5.2},
     {type:'ellipse', x:0, z:-184, rx:35, rz:24, floorY:-5.2},
   ];
@@ -189,18 +195,83 @@
     const t=len2>1e-8?Math.max(0,Math.min(1,((x-ax)*dx+(z-az)*dz)/len2)):0;
     return Math.hypot(x-(ax+dx*t),z-(az+dz*t));
   }
+  // Floor cutouts are part of the same layout data as the room that owns them.
+  // The renderer and collision queries use this helper so a visible hole cannot be
+  // treated as a room floor merely because another part of that room overlaps in XZ.
+  function rogueFloorHoleContainsPoint(area,x,z){
+    for(const h of (area.floorHoles||[])){
+      if(h.type==='ellipse'){
+        const rx=Math.max(1e-6,Number(h.rx)||0),rz=Math.max(1e-6,Number(h.rz)||0);
+        if(((x-h.x)/rx)**2+((z-h.z)/rz)**2<=1)return true;
+      }else if(h.type==='corridor'){
+        const dx=h.bx-h.ax,dz=h.bz-h.az,len=Math.hypot(dx,dz);
+        if(len<1e-6)continue;
+        const along=((x-h.ax)*dx+(z-h.az)*dz)/len;
+        const lateral=((x-h.ax)*dz-(z-h.az)*dx)/len;
+        if(along>=-(Number(h.extendStart)||0)-1e-6&&along<=len+(Number(h.extendEnd)||0)+1e-6&&Math.abs(lateral)<=h.width*.5+1e-6)return true;
+      }
+    }
+    return false;
+  }
+  function rogueAreaWalkableContains(a,x,z){
+    if(a.type==='ellipse'){
+      const rx=a.rx*.99-.45,rz=a.rz*.99-.45;
+      return rx>0&&rz>0&&((x-a.x)/rx)**2+((z-a.z)/rz)**2<=1&&!rogueFloorHoleContainsPoint(a,x,z);
+    }
+    if(a.type==='segment'){
+      const dx=a.bx-a.ax,dz=a.bz-a.az,len=Math.hypot(dx,dz);
+      if(len<1e-6)return false;
+      const along=((x-a.ax)*dx+(z-a.az)*dz)/len;
+      const lateral=((x-a.ax)*dz-(z-a.az)*dx)/len;
+      // The rendered corridor is a rectangle, not a capsule. Its endpoints are
+      // connected to room floors, so do not extend a fake walkable floor past them.
+      return along>=-1e-6&&along<=len+1e-6&&Math.abs(lateral)<=a.width*.45+1e-6;
+    }
+    return false;
+  }
+  function getRogueDungeonFloorCandidates(x,z,openGates=0){
+    if(!Number.isFinite(x)||!Number.isFinite(z))return [];
+    const gates=Math.max(0,Math.min(ROGUE_GATE_Z.length,Math.floor(Number(openGates)||0)));
+    for(let i=gates;i<ROGUE_GATE_Z.length;i++)if(Math.abs(z-ROGUE_GATE_Z[i])<1.05&&Math.abs(x)<5.5)return [];
+    // The gorge has actual box-geometry bridge decks; the room mesh is cut away here.
+    if(Math.abs(z+83)<4.55&&Math.abs(x)<38){
+      if(Math.abs(x)<1.48)return [{id:'bridge:main',kind:'bridge',y:0,t:null,d:0,area:null}];
+      if(Math.abs(x-15)<1.10)return [{id:'bridge:east',kind:'bridge',y:0,t:null,d:0,area:null}];
+      return [];
+    }
+    const result=[];
+    for(let i=0;i<ROGUE_WALK_AREAS.length;i++){
+      const a=ROGUE_WALK_AREAS[i];
+      if(a.type==='segment'){
+        const dx=a.bx-a.ax,dz=a.bz-a.az,len=Math.hypot(dx,dz);
+        if(len<1e-6)continue;
+        const along=((x-a.ax)*dx+(z-a.az)*dz)/len;
+        const lateral=((x-a.ax)*dz-(z-a.az)*dx)/len;
+        if(along< -1e-6||along>len+1e-6||Math.abs(lateral)>a.width*.45+1e-6)continue;
+        const t=Math.max(0,Math.min(1,along/len));
+        const y=(a.yA||0)+((a.yB||0)-(a.yA||0))*t;
+        result.push({id:`segment:${i}`,kind:Math.abs((a.yB||0)-(a.yA||0))>1e-5?'ramp':'segment',y,t,d:Math.abs(lateral),area:a});
+      }else if(a.type==='ellipse'){
+        // Match the rendered floor polygon (max radial jag is about 1%); keep
+        // all real overlapping floors, but never include an area cut out of its mesh.
+        const metric=((x-a.x)/a.rx)**2+((z-a.z)/a.rz)**2;
+        if(metric<=1.021&&!rogueFloorHoleContainsPoint(a,x,z))result.push({id:`ellipse:${i}`,kind:'ellipse',y:Number.isFinite(a.floorY)?a.floorY:0,metric,area:a});
+      }
+    }
+    return result;
+  }
   function isRogueDungeonWalkable(x,z,openGates=0){
     if(!Number.isFinite(x)||!Number.isFinite(z))return false;
     const gates=Math.max(0,Math.min(ROGUE_GATE_Z.length,Math.floor(Number(openGates)||0)));
-    for(let i=gates;i<ROGUE_GATE_Z.length;i++) if(Math.abs(z-ROGUE_GATE_Z[i])<1.05&&Math.abs(x)<5.5)return false;
-    if(Math.abs(z+83)<4.55&&Math.abs(x)<38){
-      const onMainBridge=Math.abs(x)<1.48;
-      const onSideBridge=Math.abs(x-15)<1.10;
-      if(!onMainBridge&&!onSideBridge)return false;
-    }
-    return ROGUE_WALK_AREAS.some(a=>a.type==='ellipse'
-      ? (((x-a.x)/(a.rx*0.99-0.45))**2+((z-a.z)/(a.rz*0.99-0.45))**2<=1)
-      : roguePointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz)<=a.width*0.45);
+    for(let i=gates;i<ROGUE_GATE_Z.length;i++)if(Math.abs(z-ROGUE_GATE_Z[i])<1.05&&Math.abs(x)<5.5)return false;
+    // The visible floor is removed across the gorge; only the two rendered bridges remain walkable.
+    if(Math.abs(z+83)<4.55&&Math.abs(x)<38)return Math.abs(x)<1.48||Math.abs(x-15)<1.10;
+    return ROGUE_WALK_AREAS.some(a=>{
+      if(a.type==='ellipse')return rogueAreaWalkableContains(a,x,z);
+      // Keep a small capsule-like nav tolerance at corridor endpoints for route finding.
+      // Player collision still requires an actual floor candidate, so this does not create fake ground.
+      return a.type==='segment'&&roguePointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz)<=a.width*.45;
+    });
   }
 
   // 斜面通路の側壁は見た目だけのメッシュなので、側面から坂へ乗り上げる侵入だけを止める。
@@ -2969,7 +3040,7 @@
     getClosedFenceLoops, isInsideFenceEnclosure, findSafeEscapePoint,
     MAX_OUTDOOR_COLLECTIBLE_KEYS, MAX_CAVE_ORE_KEYS, MAX_CAVE_ITEM_KEYS, MAX_UNDERWATER_RESOURCES, UNDERWATER_INTERACT_RADIUS,
     CAVE_MOUTH_OFFSET, CAVE_EXIT_RECESS, CAVE_EXIT_OFFSET,
-    CAVE_ROOM_RADIUS, CAVE_INTERIOR_ENTRY, CAVE_INTERIOR_EXIT, ROGUE_DUNGEON_INDEX, ROGUE_WALK_AREAS, ROGUE_GATE_Z, isRogueDungeonWalkable, findRogueDungeonPath, getRogueDungeonLayout, resolveRogueDungeonSpawn, getRogueChestReward, ROGUE_ENEMY_PROFILES, getRogueEnemyProfile,
+    CAVE_ROOM_RADIUS, CAVE_INTERIOR_ENTRY, CAVE_INTERIOR_EXIT, ROGUE_DUNGEON_INDEX, ROGUE_WALK_AREAS, ROGUE_GATE_Z, isRogueDungeonWalkable, getRogueDungeonFloorCandidates, rogueFloorHoleContainsPoint, findRogueDungeonPath, getRogueDungeonLayout, resolveRogueDungeonSpawn, getRogueChestReward, ROGUE_ENEMY_PROFILES, getRogueEnemyProfile,
     getBossHome, BOSS_MAX_HP, BOSS_RADIUS, BOSS_RESPAWN_MS, BOSS_HIT_RANGE, BOSS_ATTACKS, BOSS_STATE_CODE,
   };
 });
