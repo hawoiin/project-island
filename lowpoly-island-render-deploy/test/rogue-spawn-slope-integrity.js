@@ -25,10 +25,10 @@ const source=html.slice(start,end)+'\nglobalThis.__floorTest={rogueFloorHeight,i
 const context={Math,Number,Shared,rogueRun:null,THREE:{MathUtils:{clamp:(v,min,max)=>Math.min(max,Math.max(min,v))}}};
 vm.runInNewContext(source,context,{timeout:1000});
 const floor=context.__floorTest.rogueFloorHeight;
-assert.ok(Math.abs(floor(-28,-67)-3.8)<.08,'overlapping central room must not overwrite the high ledge floor');
-assert.ok(Math.abs(floor(30,-99)-(-2.6))<.08,'overlapping central room must not overwrite the lower side chamber floor');
-assert.ok(Math.abs(floor(-21.5,-73.5)-1.9)<.08,'west ramp floor must interpolate continuously');
-assert.ok(Math.abs(floor(0,-159)-(-3.3))<.12,'deep ramp floor must interpolate continuously');
+assert.ok(Math.abs(floor(0,-83))<.08,'the central chamber must remain on the continuous 0m floor');
+assert.ok(Math.abs(floor(0,-112)-(-.6))<.08,'the single main ramp must interpolate continuously at its midpoint');
+assert.ok(Math.abs(floor(0,-120.5)-(-1.1667))<.12,'the ramp must connect smoothly to the rear chamber');
+assert.ok(Math.abs(floor(0,-166)-(-1.2))<.08,'the rear corridor and boss chamber must share their floor height');
 assert.ok(/rootDir:\s*lowpoly-island-render-deploy/.test(fs.readFileSync(path.join(root,'..','render.yaml'),'utf8')),'repository-root Render config must point at the renamed folder');
 console.log(`PASS safe spawns (${checkedEnemies} enemies/bosses, ${checkedChests} chests across 250 deterministic layouts)`);
 console.log('PASS overlapping floor heights and ramp interpolation');

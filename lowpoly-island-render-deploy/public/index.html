@@ -576,7 +576,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v64.3</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v65.0</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -1666,10 +1666,9 @@ window.startGame = function(NETINIT){
     }
   }
 
-  // ============ v60: 高低差と裂け目の橋渡りを備えたStarBreak風ダンジョン ============
+  // ============ v65: 一本道の部屋列と緩い坂を備えたローグライクダンジョン ============
   const ROGUE_DUNGEON_INDEX = Shared.ROGUE_DUNGEON_INDEX;
-  // StarBreakを参考に、地形を読む・分岐を選ぶ・危険な場所へ踏み込む体験を優先。
-  // 床メッシュと移動可能範囲は同じ座標定義から作り、装飾の外へ歩き抜けないようにする。
+  // まず入口からボスまで迷わず通れる構造を優先する。床メッシュと歩行判定は共有の地形定義から作る。
   const ROGUE_WALK_AREAS = Shared.ROGUE_WALK_AREAS;
   const ROGUE_GATE_Z = Shared.ROGUE_GATE_Z;
   function pointSegmentDistance2D(x,z,ax,az,bx,bz){
@@ -1681,7 +1680,9 @@ window.startGame = function(NETINIT){
     // 傾斜通路は接続点から接続点まで高さを線形補間し、部屋の床と段差なく結ぶ。
     let best=null;
     for(const a of ROGUE_WALK_AREAS){
-      if(a.type!=='segment'||Math.abs((a.yB||0)-(a.yA||0))<1e-5) continue;
+      // 坂だけでなく、部屋床から切り欠いた平坦な連絡路も床高の正規ソースにする。
+      // ここを坂だけに限定すると、切り欠きの中で表示・装飾用の床高が0mへ戻る。
+      if(a.type!=='segment') continue;
       const dx=a.bx-a.ax,dz=a.bz-a.az,len2=dx*dx+dz*dz;
       const t=len2>1e-8?THREE.MathUtils.clamp(((x-a.ax)*dx+(z-a.az)*dz)/len2,0,1):0;
       const d=pointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz);
@@ -1850,7 +1851,7 @@ window.startGame = function(NETINIT){
       const floorDark = new THREE.MeshStandardMaterial({color:0x353b40,roughness:1,flatShading:true});
       const floorLight = new THREE.MeshStandardMaterial({color:0x5e605b,roughness:1,flatShading:true});
       function addEllipseFloor(cx,cz,rx,rz,variant,floorY=0,hole=null){
-        // 完全な円盤を並べない。少し不規則な岩床の輪郭にし、中央洞窟では裂け目を実際に床メッシュから抜く。
+        // 完全な円盤を並べず、少し不規則な岩床の輪郭と共有定義の通路切り欠きを使う。
         const shape=new THREE.Shape();
         const points=64;
         for(let i=0;i<points;i++){
@@ -1911,11 +1912,11 @@ window.startGame = function(NETINIT){
       }
       // 古代の石畳。均一なタイル床にせず、ひび割れたパネルを要所へだけ置く。
       const tileGeo=new THREE.BoxGeometry(2.4,.1,1.25);
-      for(const area of [{x:0,z:-32,n:24},{x:0,z:-81,n:46},{x:0,z:-136,n:28},{x:0,z:-184,n:40}]){
+      for(const area of [{x:0,z:-32,n:24},{x:0,z:-81,n:42},{x:0,z:-136,n:28},{x:0,z:-184,n:40}]){
         for(let i=0;i<area.n;i++){
-          const a=Math.random()*Math.PI*2, r=Math.sqrt(Math.random())*(area.z===-81?24:area.z===-184?23:area.z===-32?13:16);
+          const a=Math.random()*Math.PI*2, r=Math.sqrt(Math.random())*(area.z===-81?15:area.z===-184?23:area.z===-32?13:16);
           const m=new THREE.Mesh(tileGeo,stoneMats[Math.floor(Math.random()*stoneMats.length)]);
-          const tx=area.x+Math.cos(a)*r,tz=area.z+Math.sin(a)*r*.68; if(Math.abs(tz+83)<4.7&&Math.abs(tx)<36) continue; m.position.set(tx,rogueFloorHeight(tx,tz)-.045,tz); m.rotation.y=(Math.random()-.5)*.5; s.add(m);
+          const tx=area.x+Math.cos(a)*r,tz=area.z+Math.sin(a)*r*.68; m.position.set(tx,rogueFloorHeight(tx,tz)-.045,tz); m.rotation.y=(Math.random()-.5)*.5; s.add(m);
         }
       }
       // 各広間の縁を天然岩で囲む。通路と分岐の入口は空け、歩ける幅より外側に配置する。
@@ -1940,43 +1941,13 @@ window.startGame = function(NETINIT){
         }
         rogueRockBatches.clear();
       }
-      // 中央裂け目: 床をくり抜き、底を約5m下げた天然の大亀裂として作る。
-      const chasmBottomGeo=new THREE.CircleGeometry(1,48); chasmBottomGeo.rotateX(-Math.PI/2);
-      const chasmBottom=new THREE.Mesh(chasmBottomGeo,new THREE.MeshStandardMaterial({color:0x10151a,roughness:1,flatShading:true}));
-      chasmBottom.scale.set(35.5,1,4.5); chasmBottom.position.set(0,-5.35,-83); s.add(chasmBottom);
-      for(let i=0;i<18;i++){
-        const x=-33+i*(66/17);
-        // 二本の橋の入口をふさがない。
-        if(Math.abs(x)<4.9||Math.abs(x-15)<4.4) continue;
-        for(const z of [-78.55,-87.45]){
-          addRock(x,-1.7+Math.random()*.45,z,1.5+Math.random()*.7,2.0+Math.random()*1.6,1.0+Math.random()*.7,rockMats[(i+(z< -83?1:0))%rockMats.length]);
-        }
-      }
-      // 古い中央橋は欠けた石板、東の橋は狭い一本橋。渡る位置を選ぶ必要がある。
-      for(const bridge of [{x:0,width:3.75,seed:0},{x:15,width:2.95,seed:1}]){
-        for(let i=0;i<8;i++){
-          const slab=new THREE.Mesh(new THREE.BoxGeometry(bridge.width,.28,1.98),stoneMats[(i+bridge.seed)%stoneMats.length]);
-          slab.position.set(bridge.x,-.14,-90.1+i*1.95); slab.rotation.y=(i%2===0?-.018:.018); slab.castShadow=true; slab.receiveShadow=true; s.add(slab);
-        }
-        for(const side of [-1,1]) for(const z of [-88.6,-84.7,-80.8,-76.9]){
-          const broken=new THREE.Mesh(new THREE.BoxGeometry(.28,.65,.65),stoneMats[2]);
-          broken.position.set(bridge.x+side*(bridge.width/2+.08),.13,z); broken.rotation.z=(side===1?.08:-.06); s.add(broken);
-        }
-      }
-      // 裂け目の底にも細い結晶があり、落差を目で把握できるようにする。
-      const chasmCrystalGeo=new THREE.ConeGeometry(1,1,5);
-      for(let i=0;i<9;i++){
-        const x=-22+i*5.2,h=.7+(i%3)*.35;
-        const shard=new THREE.Mesh(chasmCrystalGeo,glowMat); shard.scale.set(.22,h,.22);
-        shard.position.set(x,-5.35+h/2,-83+(i%2?1.2:-1.2)); shard.rotation.z=(i%2?-.12:.1); s.add(shard);
-      }
-
+      // v65では裂け目を廃止。中央広間から後方へ床面が連続する。
       function rockRim(cx,cz,rx,rz,n,floorY=0){
         for(let i=0;i<n;i++){
           const a=(i/n)*Math.PI*2+(Math.random()-.5)*.13;
           const x=cx+Math.cos(a)*(rx+2.7+Math.random()*2.5), z=cz+Math.sin(a)*(rz+2.2+Math.random()*2.3);
-          if(Math.abs(z+52)<13&&Math.abs(x)<8) continue;
-          if(Math.abs(z+110)<13&&Math.abs(x)<8) continue;
+          if(Math.abs(z+56)<13&&Math.abs(x)<8) continue;
+          if(Math.abs(z+100)<13&&Math.abs(x)<8) continue;
           if(Math.abs(z+158)<13&&Math.abs(x)<8) continue;
           // 引数 rx/rz は広間の半径として上の配置座標に使うため、
           // 個々の岩サイズは別名にして初期化前参照（TDZ）を防ぐ。
@@ -1985,22 +1956,14 @@ window.startGame = function(NETINIT){
           addRock(x,floorY+.6+Math.random()*1.5,z,rockRx,rockRy,rockRz,rockMats[Math.floor(Math.random()*rockMats.length)]);
         }
       }
-      rockRim(0,12,19,16,26,0); rockRim(0,-37,23,16,30,0); rockRim(0,-83,36,25,46,0);
-      rockRim(-42,-66,15,13,22,3.8); rockRim(44,-97,16,14,22,-2.6); rockRim(0,-137,27,18,34,-1.4); rockRim(0,-184,35,24,44,-5.2);
-      // 東側の窪地には浅い地下水を配置。水面は歩行面に重ねるが、床判定と敵AIは岩床を使う。
-      const poolGeo=new THREE.CircleGeometry(1,40); poolGeo.rotateX(-Math.PI/2);
-      const poolMat=new THREE.MeshStandardMaterial({color:0x163a45,emissive:0x071c26,emissiveIntensity:.45,transparent:true,opacity:.78,roughness:.28,metalness:.12,side:THREE.DoubleSide,depthWrite:false});
-      const pool=new THREE.Mesh(poolGeo,poolMat); pool.scale.set(9.1,1,5.6); pool.position.set(46.5,-2.53,-98.4); s.add(pool);
-      const poolEdgeMat=new THREE.MeshStandardMaterial({color:0x2f636b,emissive:0x0d3840,emissiveIntensity:.32,roughness:.4,transparent:true,opacity:.6});
-      for(const ring of [{r:7.8,t:.07},{r:5.4,t:.05}]){
-        const ripple=new THREE.Mesh(new THREE.TorusGeometry(ring.r,ring.t,5,36),poolEdgeMat); ripple.rotation.x=Math.PI/2; ripple.scale.z=.62; ripple.position.set(46.5,-2.49,-98.4); s.add(ripple);
-      }
+      rockRim(0,12,19,16,26,0); rockRim(0,-37,23,16,30,0); rockRim(0,-83,36,16,40,0);
+      rockRim(0,-137,27,18,34,-1.2); rockRim(0,-184,35,20,44,-1.2);
       // 通路上の崩落岩は左右へ寄せ、プレイヤーが真ん中を通れる幅を保つ。
       for(const seg of [
-        {z:-9,len:22,w:11,za:1,zb:-24,yA:0,yB:0},
-        {z:-56,len:12,w:10,za:-49,zb:-63,yA:0,yB:0},
-        {z:-115,len:16,w:10,za:-103,zb:-121,yA:0,yB:-1.4},
-        {z:-160,len:12,w:10,za:-152,zb:-166,yA:-1.4,yB:-5.2}
+        {z:-9,len:22,w:12,za:1,zb:-24,yA:0,yB:0},
+        {z:-59.5,len:21,w:12,za:-49,zb:-70,yA:0,yB:0},
+        {z:-112,len:18,w:12,za:-103,zb:-121,yA:0,yB:-1.2},
+        {z:-159,len:14,w:12,za:-152,zb:-166,yA:-1.2,yB:-1.2}
       ]){
         for(let side of [-1,1]) for(let i=0;i<4;i++){
           const x=side*(seg.w/2+2.8+Math.random()*1.4),z=seg.z+(i-1.5)*(seg.len/4);
@@ -2017,18 +1980,7 @@ window.startGame = function(NETINIT){
         const shaft=new THREE.Mesh(new THREE.CylinderGeometry(wide*.42,wide*.62,h*.62,6),stoneMats[(matIndex+1)%stoneMats.length]); shaft.position.set(x,baseY+h*.56,z); shaft.castShadow=true; s.add(shaft);
         const cap=new THREE.Mesh(new THREE.BoxGeometry(wide*1.6,.42,wide*1.6),stoneMats[(matIndex+2)%stoneMats.length]); cap.position.set(x,baseY+h*.89,z); s.add(cap);
       }
-      for(const p of [[-10,-34,6,1.1,0,0],[10,-39,4.5,.9,1,0],[-27,-92,8,1.25,2,0],[25,-74,6,.9,1,0],[-8,-132,7,1.0,0,-1.4],[9,-142,5,.85,2,-1.4],[-18,-181,9,1.4,1,-5.2],[18,-187,8,1.2,0,-5.2],[-43,-66,6,1.35,1,3.8],[-49,-64,4.5,.95,2,3.8]]) addPillar(...p);
-      // 西側の高台は柱脚の上に崩れた石橋が残る。床面を高くしているため、下から見上げると段差が読める。
-      for(const [x,z] of [[-52,-70],[-42,-73],[-32,-70]]){
-        const support=new THREE.Mesh(new THREE.CylinderGeometry(.7,.95,3.8,6),stoneMats[2]);
-        support.position.set(x,1.9,z); support.castShadow=true; s.add(support);
-      }
-      // 中央の大崩落橋: 幅を持たせた石の床と欠けた欄干を左右の壁から張り出す。
-      for(let i=0;i<7;i++){
-        const z=-73-i*2.15, x=(i%2===0?-1:1)*(4.4+(i%3)*.4);
-        const slab=new THREE.Mesh(new THREE.BoxGeometry(3.8,.38,2.25),stoneMats[i%stoneMats.length]);
-        slab.position.set(x,rogueFloorHeight(x,z)-.08,z);slab.rotation.y=(i%2?-.06:.04);slab.castShadow=true;s.add(slab);
-      }
+      for(const p of [[-10,-34,6,1.1,0,0],[10,-39,4.5,.9,1,0],[-27,-92,8,1.25,2,0],[25,-74,6,.9,1,0],[-8,-132,7,1.0,0,-1.2],[9,-142,5,.85,2,-1.2],[-18,-181,9,1.4,1,-1.2],[18,-187,8,1.2,0,-1.2]]) addPillar(...p);
       // 巨大な鍾乳石。上部の暗い天井と高さを示し、地形を狭く見せない。
       const stalactiteGeo=new THREE.ConeGeometry(1,1,5);
       for(let i=0;i<34;i++){
@@ -2039,7 +1991,7 @@ window.startGame = function(NETINIT){
       }
       // 結晶群を主な広間と分岐の奥へ。発光材は共有してドローコールとメモリ負荷を抑える。
       const crystalGeo=new THREE.ConeGeometry(1,1,5);
-      for(const spot of [[-11,-31],[13,-42],[-50,-66],[52,-96],[-13,-131],[12,-144],[-20,-190],[19,-177]]){
+      for(const spot of [[-11,-31],[13,-42],[-27,-79],[25,-91],[-13,-131],[12,-144],[-20,-190],[19,-177]]){
         const count=3+Math.floor(Math.random()*3);
         for(let j=0;j<count;j++){
           const h=.8+Math.random()*2.4, r=.18+Math.random()*.18;
@@ -2048,7 +2000,7 @@ window.startGame = function(NETINIT){
         }
       }
       // 明かりは主要区画にのみ設置。
-      for(const l of [[0,9, -34,0x91e4e9],[0,10,-82,0x77d5dd],[-40,7,-66,0xe4b46d],[43,7,-97,0x91e4e9],[0,9,-138,0x77d5dd],[0,12,-184,0xeca7ff]]){
+      for(const l of [[0,9,-34,0x91e4e9],[0,10,-82,0x77d5dd],[0,8,-137,0x77d5dd],[0,9,-184,0xeca7ff]]){
         const pl=new THREE.PointLight(l[3],1.5,37,2); pl.position.set(l[0],l[1],l[2]); s.add(pl);
       }
       // 石の封印門。閉じている間はクライアントの歩行範囲判定も同じ場所で止める。
@@ -8348,9 +8300,6 @@ window.startGame = function(NETINIT){
           mmCtx.beginPath(); mmCtx.ellipse(mx(a.x),my(a.z),a.rx*.48,a.rz*.40,0,0,Math.PI*2); mmCtx.stroke();
         }else{mmCtx.beginPath();mmCtx.moveTo(mx(a.ax),my(a.az));mmCtx.lineTo(mx(a.bx),my(a.bz));mmCtx.stroke();}
       }
-      // 黒い横線は大亀裂。中央橋と東の細い橋だけが通過可能。
-      mmCtx.strokeStyle='rgba(5,8,11,.95)';mmCtx.lineWidth=3.3;mmCtx.beginPath();mmCtx.moveTo(mx(-28),my(-83));mmCtx.lineTo(mx(28),my(-83));mmCtx.stroke();
-      mmCtx.strokeStyle='#b7a87c';mmCtx.lineWidth=1.4;for(const bx of [0,15]){mmCtx.beginPath();mmCtx.moveTo(mx(bx),my(-90.5));mmCtx.lineTo(mx(bx),my(-75.5));mmCtx.stroke();}
       for(let i=rogueRun.openGates;i<ROGUE_GATE_Z.length;i++){
         mmCtx.strokeStyle='#bb6970';mmCtx.lineWidth=2;mmCtx.beginPath();mmCtx.moveTo(mx(-5),my(ROGUE_GATE_Z[i]));mmCtx.lineTo(mx(5),my(ROGUE_GATE_Z[i]));mmCtx.stroke();
       }
@@ -9796,7 +9745,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=64.3-unified-floor-surfaces"></script>
+<script src="shared.js?v=65.0-linear-dungeon-prototype"></script>
 <script src="boot.js"></script>
 </body>
 </html>

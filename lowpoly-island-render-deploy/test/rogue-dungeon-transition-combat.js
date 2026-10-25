@@ -43,7 +43,7 @@ const client = sim.clients.get(21);
 check('正規の入口からローグライク遺跡へ入れる', client.cave === rogueIndex);
 // ボス後の生還門付近へ進んだ状態を再現。移動速度の個別テストではなく、退室遷移を検証する。
 client.lastStateAt = Date.now() - 10000;
-sim.handle(21, { t: 'state', x: 0, y: -5.2, z: -201, ry: 0, cave: rogueIndex, f: 0 });
+sim.handle(21, { t: 'state', x: 0, y: -1.2, z: -201, ry: 0, cave: rogueIndex, f: 0 });
 check('深層の生還門付近の位置をサーバーが受け付ける', client.cave === rogueIndex && client.z === -201);
 const exit = { x: site.x + site.dirX * Shared.CAVE_EXIT_OFFSET, z: site.z + site.dirZ * Shared.CAVE_EXIT_OFFSET };
 sim.handle(21, { t: 'state', x: exit.x, y: Shared.islandHeight(exit.x, exit.z), z: exit.z, ry: 0, cave: -1, f: 0 });

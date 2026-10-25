@@ -1,35 +1,14 @@
-// v60: 高低差・裂け目・分岐を備えたStarBreak風探索ダンジョンの静的回帰テスト
+// v65: 新しい一本道ダンジョンの設計契約を確認する
 'use strict';
 const fs=require('fs'),path=require('path');
 const root=path.join(__dirname,'..');
-const html=fs.readFileSync(path.join(root,'public/index.html'),'utf8');
 const shared=fs.readFileSync(path.join(root,'public/shared.js'),'utf8');
-let failures=0;function check(name,ok){console.log((ok?'PASS ':'FAIL ')+name);if(!ok)failures++;}
-check('第3入口は通常洞窟と分離されたローグライク用サイト',/x:\s*-68,\s*z:\s*145,\s*dirX:\s*0,\s*dirZ:\s*1,\s*rogue:\s*true/.test(shared));
-check('サーバー位置検証は広域ダンジョンだけ大きい境界を許可',shared.includes('Math.abs(x) <= 105')&&shared.includes('z >= -226')&&shared.includes('ROGUE_DUNGEON_INDEX'));
-check('探索地形に複数の広間・分岐・長い回廊が定義される',shared.includes("{type:'ellipse', x:0, z:-83, rx:36, rz:25, floorY:0, floorHoles:[")&&shared.includes("{type:'ellipse', x:-42, z:-66, rx:15, rz:13, floorY:3.8}")&&shared.includes("{type:'ellipse', x:0, z:-184, rx:35, rz:24, floorY:-5.2}"));
-check('高台・傾斜路・低地・深層に異なる床高がある',html.includes('function rogueFloorHeight(x,z,segmentFactor=0.45)')&&shared.includes('floorY:3.8')&&shared.includes('floorY:-2.6')&&shared.includes('floorY:-5.2')&&shared.includes('yA:-1.4, yB:-5.2'));
-check('中央広間に実際の床抜き裂け目と2本の渡橋がある',html.includes('shape.holes.push(cut)')&&html.includes('中央裂け目: 床をくり抜き')&&shared.includes("id:'bridge:main'")&&shared.includes("id:'bridge:east'")&&html.includes('bridge of nowhere')===false);
-check('ミニマップ上でも裂け目と渡橋の位置が見える',html.includes('黒い横線は大亀裂')&&html.includes('for(const bx of [0,15])'));
-check('亀裂の上に石畳が浮かず、敵の出現点も足場上にある',html.includes('if(Math.abs(tz+83)<4.7&&Math.abs(tx)<36) continue;')&&shared.includes('spots:[[-9,-75],[8,-74],[0,-93]'));
-check('カメラ距離と床クリップは大規模ダンジョンの深さに対応',html.includes('inRogueDungeonCamera ? CAM_DIST * 0.88')&&html.includes('rogueCameraFloorHeight(camera.position.x,camera.position.z)'));
-check('屋外の灯台・海底洞窟のカメラ補正を別シーンの洞窟座標に適用しない',html.includes('if(inCaveIndex===-1){\n      const lhCam=pushCameraOutOfLighthouse')&&html.includes('cameraGoal=pushCameraIntoGrotto(lhCam.x,cy,lhCam.z)'));
-check('床高計算前にダンジョンの禁止エリアを解決する',html.includes('if(inCaveIndex===ROGUE_DUNGEON_INDEX) constrainRogueDungeonPosition(player.position);\n\n    // 簡易ジャンプ/重力'));
-check('歩行範囲は見える床の内側に縮め、カメラの床判定だけ適度に余裕を持つ',shared.includes('const rx=a.rx*.99-.45')&&shared.includes('a.width*.45')&&html.includes('rogueFloorHeight(x,z,0.58)'));
-check('下り坂の通路は広間の床メッシュから切り欠かれる',shared.includes("{type:'corridor',ax:15,az:-90,bx:30,bz:-95,width:9.2,extendStart:.6,extendEnd:5.2}")&&shared.includes("{type:'corridor',ax:0,az:-103,bx:0,bz:-121,width:10.8,extendStart:.5,extendEnd:6.8}")&&shared.includes("{type:'corridor',ax:0,az:-152,bx:0,bz:-166,width:10.8,extendStart:.5,extendEnd:4.0}")&&html.includes('rogueCorridorFloorSlot(h.ax,h.az,h.bx,h.bz')&&html.includes('const x=pt.x-cx,y=-(pt.z-cz)'));
-check('通路脇の岩のサイズを含めた配置ガードがある',html.includes('rogueRockOverlapsPassage(x,z,rockRx,rockRz,.55)')&&html.includes('seg.w/2+2.8+Math.random()*1.4')&&html.includes('const rubbleFloor=rogueInterpolatedFloor(seg.za,seg.zb,seg.yA,seg.yB,z)'));
-check('視覚上の石橋に床のない隙間が発生しない',html.includes('BoxGeometry(bridge.width,.28,1.98)'));
-check('移動境界と床は同じ歩行領域を参照し、封印門で進行を管理',html.includes('function isRogueWalkable')&&html.includes('function constrainRogueDungeonPosition')&&html.includes('function setRogueGateOpen'));
-check('敵AI・標的選択・移動・攻撃ダメージはサーバーが管理し、クライアントは位置を補間する',html.includes('function updateRogueDungeon(dt)')&&html.includes('e.targetX-e.mesh.position.x')&&shared.includes('for(const room of this.rogueRooms.values()) this.updateRogueRoom(room, dt, now)')&&shared.includes('roguePlayerHurt')&&shared.includes('findRogueDungeonPath')); 
-check('帰還インタラクトのkindは文字列として定義されReferenceErrorを起こさない',html.includes("nearest={kind:'rogueReturn'}")&&!html.includes('nearest={kind:rogueReturn}'));
-check('敵と宝箱は各エリアの床高に置かれる',html.includes('g.position.set(x,rogueFloorHeight(x,z),z)')&&html.includes('e.mesh.position.y=rogueFloorHeight(e.mesh.position.x,e.mesh.position.z)'));
-check('装備進行モジュールはHTMLにインライン同梱されstartGameより先に定義される', html.indexOf('v61.5: progression module is bundled inline') < html.indexOf('window.startGame = function') && !html.includes('<script src=\"rogue-progression.js'));
-check('戦利品・生還持ち越し・死亡ロスト・装備保管庫がある',html.includes('function openRogueChest')&&html.includes('RogueProgression.survive(rogueProgress,rogueRun,localStorage)')&&html.includes('RogueProgression.die(rogueProgress,localStorage)')&&html.includes('rogueStoreWeapon')&&html.includes('rogueTakeWeapon'));
-check('恒久的な攻撃・防御ステータス購入を廃止し、欠片は保管庫装備購入に使用',html.includes('RogueProgression.buyStoredGear')&&!html.includes('rogueMeta.attack++')&&!html.includes('rogueMeta.armor++'));
-check('死亡ロストは死亡画面より先に保存され、リロードで携行装備を復元できない', /function killPlayer\(\)\{[\s\S]*?RogueProgression\.die\(rogueProgress,localStorage\); saveRogueMeta\(\);[\s\S]*?deathOverlay.*?classList\.add\('show'\)/.test(html));
-check('枝道の敵は任意で、倒さなくても本線の進行を止めない',shared.includes("optionalSpots:[[-42,-65],[43,-95]]")&&shared.includes("kind:'spitter'")&&html.includes('e.stage===rogueRun.stage&&!e.optional&&e.hp>0')&&shared.includes('target.optional?target.stage<=room.stage:target.stage===room.stage')&&html.includes('(e.stage===rogueRun.stage||e.optional)'));
-check('枝道の敵はミニマップに残り、本線の残り数には含めない',html.includes('e.optional?1.25:1.7')&&html.includes('stage===rogueRun.stage&&!e.optional&&e.hp>0&&!e.dying'));
-check('死亡時は未精算の欠片と装備を失い、島へ帰還する',html.includes('leaveRogueDungeon(false,true)')&&html.includes('冒険失敗'));
-check('通常洞窟の半径13.5m制限は維持',/const CAVE_ROOM_R = 13\.5/.test(html)&&/const CAVE_ROOM_RADIUS = 13\.5/.test(shared));
-check('v64.3バージョン表示とキャッシュ更新が反映される',/<div id="versionLabel"[^>]*>v64\.3<\/div>/.test(html)&&html.includes('shared.js?v=64.3-unified-floor-surfaces'));
-if(failures)process.exit(1);console.log('Rogue dungeon checks passed.');
+const html=fs.readFileSync(path.join(root,'public/index.html'),'utf8');
+function check(name,condition){console.log((condition?'PASS ':'FAIL ')+name);if(!condition)process.exitCode=1;}
+check('中央広間から後方まで広い床面がつながる',shared.includes("{type:'ellipse', x:0, z:-83, rx:36, rz:16, floorY:0, floorHoles:["));
+check('高さが変わる坂は中央から後方への1本だけ', (shared.match(/yA:0, yB:-1\.2/g)||[]).length===1 && !shared.includes('floorY:3.8') && !shared.includes('floorY:-2.6'));
+check('幅12mの緩い坂が一つの共有定義で描画と移動に使われる',shared.includes("{type:'segment', ax:0, az:-103, bx:0, bz:-121, width:12, yA:0, yB:-1.2}"));
+check('旧裂け目の橋専用判定が残っていない',!shared.includes("id:'bridge:main'")&&!shared.includes("id:'bridge:east'")&&!html.includes('中央裂け目:'));
+check('戦闘門は広間・坂の境目でなく本道上に置かれる',shared.includes('const ROGUE_GATE_Z = [-56, -100, -158]'));
+check('敵の出現位置と個別報酬宝箱は新しい本道上へ配置される',shared.includes("const baseChests=[[-8,-39,0],[-23,-78,1],[23,-91,1],[-14,-137,2],[7,-145,2]]"));
+check('表示用の床メッシュは共有された歩行区画をループして生成される',html.includes('for(const a of ROGUE_WALK_AREAS)')&&html.includes('addCorridorFloor(a.ax,a.az,a.bx,a.bz,a.width,a.yA||0,a.yB||0)'));

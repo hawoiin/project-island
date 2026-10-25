@@ -19,8 +19,8 @@ check('サーバーは全敵に独立した現在位置・向き・攻撃クー�
 check('新規参加時のスナップショットに敵のサーバー位置が含まれる',()=>{const m=sent.find(x=>x.to===62&&x.msg.t==='rogueRoomJoined')?.msg;assert.ok(Array.isArray(m.enemyPositions));assert.ok(m.enemyPositions.some(e=>e.id==='e0'&&Number.isFinite(e.x)));});
 check('経路探索は開いた封印門を通り、閉じた門を越えない',()=>{assert.ok(Shared.findRogueDungeonPath(0,-35,0,-76,1).length>0);assert.equal(Shared.findRogueDungeonPath(0,-45,0,-70,0).length,0);});
 const entryX=cA.x,entryZ=cA.z;
-sim.handle(61,{t:'state',x:8,y:0,z:-83,ry:0,cave:Shared.ROGUE_DUNGEON_INDEX,f:0});
-check('サーバーは裂け目など床のない位置へのプレイヤー移動を拒否する',()=>{assert.equal(cA.x,entryX);assert.equal(cA.z,entryZ);assert.equal(Shared.isRogueDungeonWalkable(8,-83,3),false);});
+sim.handle(61,{t:'state',x:50,y:0,z:-83,ry:0,cave:Shared.ROGUE_DUNGEON_INDEX,f:0});
+check('サーバーは本道外の床がない位置へのプレイヤー移動を拒否する',()=>{assert.equal(cA.x,entryX);assert.equal(cA.z,entryZ);assert.equal(Shared.isRogueDungeonWalkable(50,-83,3),false);assert.equal(Shared.isRogueDungeonWalkable(8,-83,3),true);});
 // Enemy e0 tracks A on a valid floor in the starting chamber. B remains far away.
 const startX=mob.x,startZ=mob.z;
 cA.x=startX+8;cA.z=startZ;cA.cave=Shared.ROGUE_DUNGEON_INDEX;cA.dead=false;cA.hasState=true;cA.lastStateAt=Date.now();

@@ -163,33 +163,41 @@
   const CAVE_SITES = [
     { x: 160,  z: -70,  dirX: 0,  dirZ: 1 },
     { x: -150, z: -195, dirX: -1, dirZ: 0 },
-    // v60: 洞窟とは別系統の、上下層と分岐を備えた深層ローグライク遺跡入口。
+    // v65: 洞窟とは別系統の、広い一本道と緩い坂を備えたローグライク遺跡入口。
     { x: -68, z: 145, dirX: 0, dirZ: 1, rogue: true },
   ];
   const ROGUE_DUNGEON_INDEX = CAVE_SITES.findIndex(site => site.rogue === true);
   // ダンジョン地形の唯一の定義。サーバーAIとクライアント描画/歩行判定で共用する。
   const ROGUE_WALK_AREAS = [
-    {type:'ellipse', x:0, z:12, rx:19, rz:16, floorY:0},
-    {type:'segment', ax:0, az:1, bx:0, bz:-24, width:11, yA:0, yB:0},
-    {type:'ellipse', x:0, z:-37, rx:23, rz:16, floorY:0},
-    {type:'segment', ax:0, az:-49, bx:0, bz:-63, width:10, yA:0, yB:0},
-    {type:'ellipse', x:0, z:-83, rx:36, rz:25, floorY:0, floorHoles:[
-      {type:'ellipse',x:0,z:-83,rx:35.5,rz:4.55},
-      {type:'corridor',ax:15,az:-90,bx:30,bz:-95,width:9.2,extendStart:.6,extendEnd:5.2},
-      {type:'corridor',ax:0,az:-103,bx:0,bz:-121,width:10.8,extendStart:.5,extendEnd:6.8}
+    // v65: 一本道のブロックアウト。床・通路・移動判定はこの定義を共用する。
+    {type:'ellipse', x:0, z:12, rx:19, rz:16, floorY:0, floorHoles:[
+      {type:'corridor',ax:0,az:1,bx:0,bz:-24,width:12,extendStart:.5,extendEnd:.5}
     ]},
-    {type:'segment', ax:-14, az:-78, bx:-29, bz:-69, width:8.5, yA:0, yB:3.8},
-    {type:'ellipse', x:-42, z:-66, rx:15, rz:13, floorY:3.8},
-    {type:'segment', ax:15, az:-90, bx:30, bz:-95, width:8.5, yA:0, yB:-2.6},
-    {type:'ellipse', x:44, z:-97, rx:16, rz:14, floorY:-2.6},
-    {type:'segment', ax:0, az:-103, bx:0, bz:-121, width:10, yA:0, yB:-1.4},
-    {type:'ellipse', x:0, z:-137, rx:27, rz:18, floorY:-1.4, floorHoles:[
-      {type:'corridor',ax:0,az:-152,bx:0,bz:-166,width:10.8,extendStart:.5,extendEnd:4.0}
+    {type:'segment', ax:0, az:1, bx:0, bz:-24, width:12, yA:0, yB:0},
+    {type:'ellipse', x:0, z:-37, rx:23, rz:16, floorY:0, floorHoles:[
+      {type:'corridor',ax:0,az:1,bx:0,bz:-24,width:12,extendStart:.5,extendEnd:.5},
+      {type:'corridor',ax:0,az:-49,bx:0,bz:-63,width:12,extendStart:.5,extendEnd:.5}
     ]},
-    {type:'segment', ax:0, az:-152, bx:0, bz:-166, width:10, yA:-1.4, yB:-5.2},
-    {type:'ellipse', x:0, z:-184, rx:35, rz:24, floorY:-5.2},
+    {type:'segment', ax:0, az:-49, bx:0, bz:-70, width:12, yA:0, yB:0},
+    {type:'ellipse', x:0, z:-83, rx:36, rz:16, floorY:0, floorHoles:[
+      {type:'corridor',ax:0,az:-49,bx:0,bz:-70,width:12,extendStart:.5,extendEnd:.5},
+      {type:'corridor',ax:0,az:-97,bx:0,bz:-121,width:12,extendStart:.2,extendEnd:3.0}
+    ]},
+    // ゲート前の短い平坦区間。広間の外に門を置き、横から迂回できない接続路にする。
+    {type:'segment', ax:0, az:-97, bx:0, bz:-103, width:12, yA:0, yB:0},
+    // 唯一の坂。中央広間から後方の部屋へ、幅12mで0mから-1.2mへ緩やかに下降する。
+    {type:'segment', ax:0, az:-103, bx:0, bz:-121, width:12, yA:0, yB:-1.2},
+    {type:'ellipse', x:0, z:-137, rx:27, rz:18, floorY:-1.2, floorHoles:[
+      {type:'corridor',ax:0,az:-97,bx:0,bz:-121,width:12,extendStart:.2,extendEnd:3.0},
+      {type:'corridor',ax:0,az:-152,bx:0,bz:-166,width:12,extendStart:.5,extendEnd:1.0}
+    ]},
+    {type:'segment', ax:0, az:-152, bx:0, bz:-166, width:12, yA:-1.2, yB:-1.2},
+    {type:'ellipse', x:0, z:-184, rx:35, rz:20, floorY:-1.2, floorHoles:[
+      {type:'corridor',ax:0,az:-152,bx:0,bz:-166,width:12,extendStart:.5,extendEnd:1.0}
+    ]},
   ];
-  const ROGUE_GATE_Z = [-52, -110, -158];
+  // 門は各戦闘区画の出口に配置し、坂や床の継ぎ目の途中には置かない。
+  const ROGUE_GATE_Z = [-56, -100, -158];
   function roguePointSegmentDistance2D(x,z,ax,az,bx,bz){
     const dx=bx-ax,dz=bz-az,len2=dx*dx+dz*dz;
     const t=len2>1e-8?Math.max(0,Math.min(1,((x-ax)*dx+(z-az)*dz)/len2)):0;
@@ -233,12 +241,6 @@
     if(!Number.isFinite(x)||!Number.isFinite(z))return [];
     const gates=Math.max(0,Math.min(ROGUE_GATE_Z.length,Math.floor(Number(openGates)||0)));
     for(let i=gates;i<ROGUE_GATE_Z.length;i++)if(Math.abs(z-ROGUE_GATE_Z[i])<1.05&&Math.abs(x)<5.5)return [];
-    // The gorge has actual box-geometry bridge decks; the room mesh is cut away here.
-    if(Math.abs(z+83)<4.55&&Math.abs(x)<38){
-      if(Math.abs(x)<1.48)return [{id:'bridge:main',kind:'bridge',y:0,t:null,d:0,area:null}];
-      if(Math.abs(x-15)<1.10)return [{id:'bridge:east',kind:'bridge',y:0,t:null,d:0,area:null}];
-      return [];
-    }
     const result=[];
     for(let i=0;i<ROGUE_WALK_AREAS.length;i++){
       const a=ROGUE_WALK_AREAS[i];
@@ -264,8 +266,6 @@
     if(!Number.isFinite(x)||!Number.isFinite(z))return false;
     const gates=Math.max(0,Math.min(ROGUE_GATE_Z.length,Math.floor(Number(openGates)||0)));
     for(let i=gates;i<ROGUE_GATE_Z.length;i++)if(Math.abs(z-ROGUE_GATE_Z[i])<1.05&&Math.abs(x)<5.5)return false;
-    // The visible floor is removed across the gorge; only the two rendered bridges remain walkable.
-    if(Math.abs(z+83)<4.55&&Math.abs(x)<38)return Math.abs(x)<1.48||Math.abs(x-15)<1.10;
     return ROGUE_WALK_AREAS.some(a=>{
       if(a.type==='ellipse')return rogueAreaWalkableContains(a,x,z);
       // Keep a small capsule-like nav tolerance at corridor endpoints for route finding.
@@ -409,8 +409,8 @@
     const enemies = [];
     const packs = [
       { stage:0, kind:'shade', spots:[[-8,-31],[8,-33],[-3,-42],[5,-43]] },
-      { stage:1, kind:'crawler', spots:[[-9,-75],[8,-74],[0,-93]], optionalSpots:[[-42,-65],[43,-95]] },
-      { stage:1, kind:'spitter', spots:[[-22,-74],[24,-92]], optionalSpots:[[40,-100]] },
+      { stage:1, kind:'crawler', spots:[[-9,-75],[8,-74],[0,-93]], optionalSpots:[[-27,-82],[27,-94]] },
+      { stage:1, kind:'spitter', spots:[[-22,-74],[24,-92]], optionalSpots:[[25,-92]] },
       { stage:2, kind:'sentinel', spots:[[-10,-132],[10,-132],[-6,-141],[7,-143]], optionalSpots:[[16,-149]] },
       { stage:2, kind:'charger', spots:[[-16,-139],[16,-141]] }
     ];
@@ -425,7 +425,7 @@
         enemies.push({id:`e${enemies.length}`,kind:pack.kind,...spot,hp,stage:pack.stage,boss:false,optional:true});
       }
     }
-    const baseChests=[[-8,-39,0],[-45,-68,1],[48,-98,1],[-14,-137,2],[7,-145,2]];
+    const baseChests=[[-8,-39,0],[-23,-78,1],[23,-91,1],[-14,-137,2],[7,-145,2]];
     const chests=baseChests.map(([x,z,stage])=>resolveRogueDungeonSpawn(
       x+(random()-.5)*(stage===1?4.5:3.2),
       z+(random()-.5)*(stage===1?4.0:3.0),stage

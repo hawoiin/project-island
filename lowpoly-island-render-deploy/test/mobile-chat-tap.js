@@ -28,6 +28,6 @@ check('チャットボタンは非submitボタンでアクセシブルな名前�
 check('チャットボタンはOS依存絵文字ではなくSVGアイコン', /<button id="chatBtn"[^>]*><svg viewBox="0 0 24 24"/.test(html) && !/id="chatBtn"[^>]*>💬/.test(html));
 check('既存のチャット起動処理に接続されている', /getElementById\('chatBtn'\)\.addEventListener\('click', openChat\)/.test(html));
 check('スマホのレイアウト幅が端末幅に一致するviewport設定', /<meta name="viewport" content="width=device-width, initial-scale=1\.0, viewport-fit=cover">/.test(html));
-check('バージョン表示とキャッシュキー更新', /id="versionLabel"[^>]*>v64\.3<\/div>/.test(html) && html.includes('shared.js?v=64.3-unified-floor-surfaces'));
+check('バージョン表示とキャッシュキー更新', /id="versionLabel"[^>]*>v65\.0<\/div>/.test(html) && html.includes('shared.js?v=65.0-linear-dungeon-prototype'));
 if (failures) process.exit(1);
 console.log('Mobile chat tap regression tests passed.');
