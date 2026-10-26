@@ -567,7 +567,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v70.4</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v70.5</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -2512,15 +2512,16 @@ window.startGame = function(NETINIT){
   }
 
   const ROGUE_ENEMY_MATS={
-    // シェイド v70.4：肌はくすんだ焦げ茶、口と眼窩は暗くし、目の発光は控えめにする。
+    // シェイド v70.5：背は黒紫、腹と口まわりは淡く、目だけを琥珀色に光らせて暗い洞窟でも輪郭と視線が読めるようにする。
+    // 体と頭は頂点色（背=暗／腹=淡）を持つので shadeHide の color は白のままにする。
     shade:new THREE.MeshStandardMaterial({color:0x514139,flatShading:true,roughness:1}),
-    shadeMantle:new THREE.MeshStandardMaterial({color:0x34272a,flatShading:true,roughness:1}),
-    shadeEdge:new THREE.MeshStandardMaterial({color:0x77604c,flatShading:true,roughness:1}),
-    shadeFace:new THREE.MeshStandardMaterial({color:0x150d0f,flatShading:true,roughness:1}),
-    shadeEye:new THREE.MeshStandardMaterial({color:0xbfa56f,emissive:0x1b1008,emissiveIntensity:.08,flatShading:true,roughness:1}),
-    shadeBone:new THREE.MeshStandardMaterial({color:0x94816f,flatShading:true,roughness:1}),
-    shadeSocket:new THREE.MeshStandardMaterial({color:0x211719,flatShading:true,roughness:1}),
-    shadeMouth:new THREE.MeshStandardMaterial({color:0x10090b,flatShading:true,roughness:1}),
+    shadeHide:new THREE.MeshStandardMaterial({color:0xffffff,vertexColors:true,flatShading:true,roughness:1}),
+    shadeLimb:new THREE.MeshStandardMaterial({color:0x3a3037,flatShading:true,roughness:1}),
+    shadeMantle:new THREE.MeshStandardMaterial({color:0x221a20,flatShading:true,roughness:1}),
+    shadeBone:new THREE.MeshStandardMaterial({color:0xd6caae,flatShading:true,roughness:.85}),
+    shadeEye:new THREE.MeshStandardMaterial({color:0xffc15a,emissive:0xff8a1c,emissiveIntensity:1.1,flatShading:true,roughness:.6}),
+    shadePupil:new THREE.MeshBasicMaterial({color:0x0a0506}),
+    shadeMouth:new THREE.MeshStandardMaterial({color:0x2a0d12,flatShading:true,roughness:1}),
     crawler:new THREE.MeshStandardMaterial({color:0x9a5a43,emissive:0x35140d,emissiveIntensity:.25,flatShading:true,roughness:.9}),
     spitter:new THREE.MeshStandardMaterial({color:0x397b83,emissive:0x146c72,emissiveIntensity:.45,flatShading:true,roughness:.72}),
     charger:new THREE.MeshStandardMaterial({color:0x9b5837,emissive:0x5a2414,emissiveIntensity:.35,flatShading:true,roughness:.88}),
@@ -2531,26 +2532,42 @@ window.startGame = function(NETINIT){
   };
   // 前後方向へ細くなる上顎・下顎専用の低ポリ断面形状。前方はローカル -Z。
   // 胴体と四肢はクラシック狼・猪に近い、判別しやすい単純形状を使う。
-  function rogueLengthwiseLoftGeometry(rings){
-    const positions=[];
-    const points=r=>[[-r.w,r.y+r.h*.5,r.z],[r.w,r.y+r.h*.5,r.z],[r.w,r.y-r.h*.5,r.z],[-r.w,r.y-r.h*.5,r.z]];
-    const tri=(a,b,c)=>positions.push(...a,...b,...c);
-    for(let ri=0;ri<rings.length-1;ri++){
-      const a=points(rings[ri]),b=points(rings[ri+1]);
-      tri(a[0],a[1],b[1]);tri(a[0],b[1],b[0]);
-      tri(a[1],a[2],b[2]);tri(a[1],b[2],b[1]);
-      tri(a[2],a[3],b[3]);tri(a[2],b[3],b[2]);
-      tri(a[3],a[0],b[0]);tri(a[3],b[0],b[3]);
+  // シェイド v70.5: 8角形の断面リングを前後に並べて作る連続した体・頭・顎。
+  // 背側(hu)と腹側(hl)で別々の厚みを持てるので、箱の積み重ねにならず肩の盛り上がりやくびれが作れる。
+  // 頂点色は背側=topHex、腹側=bottomHex。巻き方向は符号付き体積で判定し、常に外向きの面にする。
+  function rogueRingLoftGeometry(rings,topHex,bottomHex){
+    const N=8,k=1/Math.cos(Math.PI/N),top=new THREE.Color(topHex),bottom=new THREE.Color(bottomHex);
+    const ringVerts=rings.map(r=>{
+      const out=[];
+      for(let i=0;i<N;i++){
+        const a=(i+.5)/N*Math.PI*2,s=Math.sin(a),c=Math.cos(a);
+        const t=Math.max(0,Math.min(1,(s+.95)/.9));
+        out.push({p:[(r.x||0)+r.w*c*k,r.y+(s>=0?r.hu:r.hl)*s*k,r.z],c:bottom.clone().lerp(top,t)});
+      }
+      return out;
+    });
+    const tris=[],tri=(a,b,c)=>tris.push(a,b,c);
+    for(let ri=0;ri<ringVerts.length-1;ri++){
+      const A=ringVerts[ri],B=ringVerts[ri+1];
+      for(let i=0;i<N;i++){const n=(i+1)%N;tri(A[i],A[n],B[n]);tri(A[i],B[n],B[i]);}
     }
-    const back=points(rings[0]),front=points(rings[rings.length-1]);
-    const bc=[0,rings[0].y,rings[0].z],fc=[0,rings[rings.length-1].y,rings[rings.length-1].z];
-    for(let i=0;i<4;i++){
-      const n=(i+1)%4;
-      tri(bc,back[n],back[i]);
-      tri(fc,front[i],front[n]);
+    const cap=(ring,r,last)=>{
+      const mid={p:[r.x||0,r.y,r.z],c:top.clone().lerp(bottom,.5)};
+      for(let i=0;i<N;i++){const n=(i+1)%N;if(last)tri(mid,ring[i],ring[n]);else tri(mid,ring[n],ring[i]);}
+    };
+    cap(ringVerts[0],rings[0],false);
+    cap(ringVerts[ringVerts.length-1],rings[rings.length-1],true);
+    let vol=0;
+    for(let i=0;i<tris.length;i+=3){
+      const a=tris[i].p,b=tris[i+1].p,c=tris[i+2].p;
+      vol+=a[0]*(b[1]*c[2]-b[2]*c[1])-a[1]*(b[0]*c[2]-b[2]*c[0])+a[2]*(b[0]*c[1]-b[1]*c[0]);
     }
+    if(vol<0)for(let i=0;i<tris.length;i+=3){const t=tris[i+1];tris[i+1]=tris[i+2];tris[i+2]=t;}
+    const positions=[],colors=[];
+    for(const v of tris){positions.push(v.p[0],v.p[1],v.p[2]);colors.push(v.c.r,v.c.g,v.c.b);}
     const geometry=new THREE.BufferGeometry();
     geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+    geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
     geometry.computeVertexNormals();
     return geometry;
   }
@@ -2561,25 +2578,34 @@ window.startGame = function(NETINIT){
     arm:new THREE.ConeGeometry(.28,1.2,5), bossArm:new THREE.ConeGeometry(.48,1.9,5),
     bossSpike:new THREE.ConeGeometry(.28,.95,5), chargerHorn:new THREE.ConeGeometry(.24,.78,5),
     spitterCore:new THREE.OctahedronGeometry(.32,0), eye:new THREE.OctahedronGeometry(.11,0),
-    // シェイド v70.4: 人型の小さなゴーレム構造をやめ、胴体と頭が連続した低い捕食獣へ。
-    // クラシック狼・猪の分かりやすい胴体と四肢の造形を参照。顔は上顎・下顎を別形状にする。
-    shadeTorso:new THREE.BoxGeometry(.68,.44,.80),
-    shadeHead:rogueLengthwiseLoftGeometry([{z:0,w:.22,h:.36,y:0},{z:-.18,w:.19,h:.30,y:-.015},{z:-.35,w:.16,h:.24,y:-.03}]),
-    shadeNeck:new THREE.BoxGeometry(.42,.30,.34),
-    shadeMuzzle:rogueLengthwiseLoftGeometry([{z:0,w:.18,h:.17,y:-.015},{z:-.18,w:.15,h:.13,y:-.025},{z:-.42,w:.11,h:.085,y:-.035}]),
-    shadeUpperArm:new THREE.BoxGeometry(.14,.36,.15),
-    shadeForearm:new THREE.BoxGeometry(.12,.33,.13),
-    shadeThigh:new THREE.BoxGeometry(.13,.28,.14),
-    shadeShin:new THREE.BoxGeometry(.095,.23,.10),
-    shadeJaw:rogueLengthwiseLoftGeometry([{z:0,w:.17,h:.065,y:0},{z:-.16,w:.14,h:.055,y:-.015},{z:-.35,w:.105,h:.04,y:-.025}]),
-    shadeSocket:new THREE.IcosahedronGeometry(.045,0),
-    shadeEye:new THREE.IcosahedronGeometry(.021,0),
-    shadeMouth:new THREE.BoxGeometry(.29,.065,.30),
-    shadeHand:new THREE.BoxGeometry(.17,.09,.22),
-    shadeClaw:new THREE.ConeGeometry(.018,.14,4),
-    shadeFoot:new THREE.BoxGeometry(.14,.08,.19),
-    shadeFang:new THREE.ConeGeometry(.018,.09,4),
-    shadeTail:new THREE.ConeGeometry(.045,.52,5)
+    // シェイド v70.5: 肩が盛り上がり腰へ細くなる一本の胴体、くさび形の頭と顎、先細りの太い四肢を持つ洞窟の捕食獣。
+    // 前方は -z。リング: z=前後位置 / w=半幅 / hu=背側の厚み / hl=腹側の厚み / y=中心の高さ。
+    shadeBody:rogueRingLoftGeometry([
+      {z:-.60,w:.13,hu:.12,hl:.11,y:.08},{z:-.42,w:.20,hu:.19,hl:.16,y:.07},{z:-.22,w:.31,hu:.30,hl:.22,y:.06},
+      {z:.02,w:.33,hu:.27,hl:.21,y:.01},{z:.30,w:.25,hu:.19,hl:.17,y:-.02},{z:.56,w:.29,hu:.21,hl:.17,y:-.06},
+      {z:.82,w:.14,hu:.11,hl:.10,y:-.10}],0x2c2530,0x85735f),
+    shadeSkull:rogueRingLoftGeometry([
+      {z:0,w:.19,hu:.16,hl:.13,y:0},{z:-.14,w:.22,hu:.18,hl:.13,y:.01},{z:-.30,w:.14,hu:.10,hl:.08,y:-.01},
+      {z:-.46,w:.105,hu:.07,hl:.06,y:-.03},{z:-.58,w:.08,hu:.045,hl:.045,y:-.045}],0x2f282f,0x6a574b),
+    shadeJaw:rogueRingLoftGeometry([
+      {z:0,w:.13,hu:.035,hl:.045,y:-.02},{z:-.18,w:.11,hu:.03,hl:.04,y:-.025},{z:-.34,w:.08,hu:.025,hl:.03,y:-.03},
+      {z:-.46,w:.05,hu:.02,hl:.025,y:-.035}],0x4a2b30,0x3a2a2e),
+    shadeUpperLeg:new THREE.CylinderGeometry(.105,.07,.40,6),
+    shadeLowerLeg:new THREE.CylinderGeometry(.065,.048,.38,6),
+    shadeThigh:new THREE.CylinderGeometry(.15,.08,.50,6),
+    shadeShin:new THREE.CylinderGeometry(.07,.045,.48,6),
+    shadeMuscle:new THREE.IcosahedronGeometry(.17,0),
+    shadePaw:new THREE.BoxGeometry(.15,.07,.22),
+    shadeClaw:new THREE.ConeGeometry(.02,.13,4),
+    shadeFang:new THREE.ConeGeometry(.022,.12,4),
+    shadeEar:new THREE.ConeGeometry(.06,.22,4),
+    shadeBrow:new THREE.BoxGeometry(.13,.035,.20),
+    shadeEye:new THREE.IcosahedronGeometry(.048,0),
+    shadePupil:new THREE.BoxGeometry(.012,.07,.02),
+    shadeNostril:new THREE.IcosahedronGeometry(.02,0),
+    shadeMouth:new THREE.BoxGeometry(.17,.03,.30),
+    shadeTailBase:new THREE.ConeGeometry(.085,.50,5),
+    shadeTailTip:new THREE.ConeGeometry(.05,.34,5)
   };
   const ROGUE_ATTACK_WARNING_GEO=new THREE.TorusGeometry(1,.055,4,28);
   const ROGUE_ATTACK_WARNING_MATS={
@@ -2670,56 +2696,61 @@ window.startGame = function(NETINIT){
         leg.position.set(Math.cos(a)*.67,.32,Math.sin(a)*.68); leg.rotation.z=Math.cos(a)*.8; leg.rotation.x=Math.sin(a)*.55; g.add(leg);
       }
     }else if(kind==='shade'&&!boss){
-      // v70.4: 人型のパーツ配置・正面マスクを捨て、上顎が前へ伸びる四足の洞窟捕食獣にする。
-      const body=new THREE.Group();body.scale.set(1.08,1.22,1.12);g.add(body);
-      const torso=new THREE.Group();torso.position.set(0,.72,.08);torso.rotation.x=.015;body.add(torso);
-      const trunk=new THREE.Mesh(ROGUE_GEOMETRIES.shadeTorso,mat);trunk.position.set(0,0,.12);trunk.castShadow=true;torso.add(trunk);
-      const rump=new THREE.Mesh(ROGUE_GEOMETRIES.shadeTorso,mat);rump.scale.set(.86,.86,.88);rump.position.set(0,-.025,.55);rump.castShadow=true;torso.add(rump);
-      const neck=new THREE.Mesh(ROGUE_GEOMETRIES.shadeNeck,mat);neck.position.set(0,.025,-.39);neck.rotation.x=-.08;neck.castShadow=true;torso.add(neck);
-      const belly=new THREE.Mesh(ROGUE_GEOMETRIES.shadeTorso,ROGUE_ENEMY_MATS.shadeEdge);belly.scale.set(.64,.35,.67);belly.position.set(0,-.19,.02);torso.add(belly);
+      // v70.5: 肩が高く腰が低い、頭の大きな四足の洞窟獣。脚は太ももと脛を折った趾行で、足裏は床に付く。
+      const M=ROGUE_ENEMY_MATS,G=ROGUE_GEOMETRIES;
+      const part=(parent,geo,mat,x,y,z,o={})=>{
+        const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);
+        if(o.s)m.scale.set(o.s[0],o.s[1],o.s[2]);
+        if(o.r)m.rotation.set(o.r[0],o.r[1],o.r[2]);
+        if(o.cast)m.castShadow=true;
+        parent.add(m);return m;
+      };
+      const body=new THREE.Group();body.scale.setScalar(1.12);g.add(body);
+      const torso=new THREE.Group();torso.position.set(0,.96,0);body.add(torso);
+      part(torso,G.shadeBody,M.shadeHide,0,0,0,{cast:true});
 
-      const head=new THREE.Group();head.position.set(0,.12,-.59);head.rotation.x=-.07;torso.add(head);
-      const skull=new THREE.Mesh(ROGUE_GEOMETRIES.shadeHead,mat);skull.castShadow=true;head.add(skull);
-      // 目は頭の側面。眉板や正面に並べた顔パーツは使わない。
+      const headBase=[0,.10,-.62],baseHeadX=-.06;
+      const head=new THREE.Group();head.position.set(headBase[0],headBase[1],headBase[2]);head.rotation.x=baseHeadX;torso.add(head);
+      part(head,G.shadeSkull,M.shadeHide,0,0,0,{cast:true});
+      const jaw=new THREE.Group();jaw.position.set(0,-.11,-.06);head.add(jaw);
+      part(jaw,G.shadeJaw,M.shadeHide,0,0,0,{cast:true});
+      part(head,G.shadeMouth,M.shadeMouth,0,-.105,-.27);
       for(const side of [-1,1]){
-        const socket=new THREE.Mesh(ROGUE_GEOMETRIES.shadeSocket,ROGUE_ENEMY_MATS.shadeSocket);socket.scale.set(.8,.95,.58);socket.position.set(side*.18,.06,-.225);head.add(socket);
-        const eye=new THREE.Mesh(ROGUE_GEOMETRIES.shadeEye,ROGUE_ENEMY_MATS.shadeEye);eye.scale.set(.68,.62,.42);eye.position.set(side*.183,.06,-.247);head.add(eye);
-        const nostril=new THREE.Mesh(ROGUE_GEOMETRIES.shadeSocket,ROGUE_ENEMY_MATS.shadeSocket);nostril.scale.set(.55,.40,.35);nostril.position.set(side*.045,-.015,-.485);head.add(nostril);
-      }
-      const muzzle=new THREE.Mesh(ROGUE_GEOMETRIES.shadeMuzzle,mat);muzzle.position.set(0,-.005,-.10);muzzle.castShadow=true;head.add(muzzle);
-      // 黒い口は鼻先の前面ではなく、上顎の下側へ沿わせる。
-      const mouth=new THREE.Mesh(ROGUE_GEOMETRIES.shadeMouth,ROGUE_ENEMY_MATS.shadeMouth);mouth.position.set(0,-.205,-.31);head.add(mouth);
-      const jaw=new THREE.Group();jaw.position.set(0,-.215,-.23);head.add(jaw);
-      const jawMesh=new THREE.Mesh(ROGUE_GEOMETRIES.shadeJaw,ROGUE_ENEMY_MATS.shadeMantle);jawMesh.castShadow=true;jaw.add(jawMesh);
-      for(const toothX of [-.085,0,.085]){
-        const upperFang=new THREE.Mesh(ROGUE_GEOMETRIES.shadeFang,ROGUE_ENEMY_MATS.shadeBone);upperFang.position.set(toothX,-.12,-.46);upperFang.rotation.z=Math.PI;head.add(upperFang);
-      }
-      for(const toothX of [-.085,.085]){
-        const lowerFang=new THREE.Mesh(ROGUE_GEOMETRIES.shadeFang,ROGUE_ENEMY_MATS.shadeBone);lowerFang.position.set(toothX,.015,-.30);jaw.add(lowerFang);
+        part(head,G.shadeBrow,M.shadeMantle,side*.14,.125,-.22,{r:[0,side*.12,-side*.38]});
+        part(head,G.shadeEye,M.shadeEye,side*.15,.07,-.23,{s:[.6,.75,1.2]});
+        part(head,G.shadePupil,M.shadePupil,side*.152,.07,-.282);
+        part(head,G.shadeEar,M.shadeMantle,side*.13,.19,0,{r:[.35,0,-side*.40]});
+        part(head,G.shadeNostril,M.shadeMouth,side*.035,-.04,-.585);
+        part(head,G.shadeFang,M.shadeBone,side*.065,-.13,-.46,{r:[0,0,Math.PI]});
+        part(jaw,G.shadeFang,M.shadeBone,side*.05,.05,-.34,{s:[1,.7,1]});
       }
 
-      const legs=[],tail=new THREE.Group();tail.position.set(0,-.03,.66);torso.add(tail);
-      const tailMesh=new THREE.Mesh(ROGUE_GEOMETRIES.shadeTail,ROGUE_ENEMY_MATS.shadeMantle);tailMesh.position.z=.24;tailMesh.rotation.x=Math.PI/2;tailMesh.castShadow=true;tail.add(tailMesh);
+      const legs=[];
+      const buildLeg=o=>{
+        const hip=new THREE.Group();hip.position.set(o.side*o.x,o.y,o.z);hip.rotation.x=o.hip;torso.add(hip);
+        part(hip,o.muscle.geo,M.shadeLimb,o.side*.03,o.muscle.y,o.muscle.z,{s:o.muscle.s,cast:true});
+        part(hip,o.upper,M.shadeLimb,0,-o.l1/2,0,{cast:true});
+        const knee=new THREE.Group();knee.position.set(0,-o.l1,0);knee.rotation.x=o.knee;hip.add(knee);
+        part(knee,o.lower,M.shadeLimb,0,-o.l2/2,0,{cast:true});
+        // 足先は付け根の角度を打ち消して、立っているときに足裏が水平になるようにする。
+        const foot=new THREE.Group();foot.position.set(0,-o.l2,0);foot.rotation.x=-(o.hip+o.knee);knee.add(foot);
+        part(foot,G.shadePaw,M.shadeMantle,0,-.035,o.footZ,{s:o.pawScale,cast:true});
+        for(const cx of o.claws)part(foot,G.shadeClaw,M.shadeBone,cx,-.045,o.footZ-.14,{r:[-1.92,0,0]});
+        legs.push({hip,knee,foot,side:o.side,front:o.front,phase:o.phase,baseHip:o.hip,baseKnee:o.knee});
+      };
       for(const side of [-1,1]){
-        const frontHip=new THREE.Group();frontHip.position.set(side*.30,-.08,-.30);frontHip.rotation.x=.08;torso.add(frontHip);
-        const frontUpper=new THREE.Mesh(ROGUE_GEOMETRIES.shadeUpperArm,mat);frontUpper.position.y=-.17;frontUpper.castShadow=true;frontHip.add(frontUpper);
-        if(side>0)frontUpper.scale.set(1,1.08,1);
-        const frontKnee=new THREE.Group();frontKnee.position.set(0,-.33,-.04);frontKnee.rotation.x=-.06;frontHip.add(frontKnee);
-        const frontLower=new THREE.Mesh(ROGUE_GEOMETRIES.shadeForearm,mat);frontLower.position.set(0,-.15,-.01);frontLower.castShadow=true;frontKnee.add(frontLower);
-        const frontPaw=new THREE.Mesh(ROGUE_GEOMETRIES.shadeHand,ROGUE_ENEMY_MATS.shadeMantle);frontPaw.position.set(0,-.27,-.065);frontPaw.castShadow=true;frontKnee.add(frontPaw);
-        for(const clawSide of [-1,0,1]){
-          const claw=new THREE.Mesh(ROGUE_GEOMETRIES.shadeClaw,ROGUE_ENEMY_MATS.shadeFace);claw.position.set(clawSide*.055,-.275,-.16-(clawSide===0?.012:0));claw.rotation.x=-Math.PI/2;frontKnee.add(claw);
-        }
-        legs.push({hip:frontHip,knee:frontKnee,side,front:true,phase:side<0?0:Math.PI});
-
-        const hindHip=new THREE.Group();hindHip.position.set(side*.25,-.27,.42);hindHip.rotation.x=-.06;torso.add(hindHip);
-        const hindUpper=new THREE.Mesh(ROGUE_GEOMETRIES.shadeThigh,ROGUE_ENEMY_MATS.shadeMantle);hindUpper.position.y=-.13;hindUpper.castShadow=true;hindHip.add(hindUpper);
-        const hindKnee=new THREE.Group();hindKnee.position.set(0,-.20,.025);hindKnee.rotation.x=.06;hindHip.add(hindKnee);
-        const hindLower=new THREE.Mesh(ROGUE_GEOMETRIES.shadeShin,mat);hindLower.position.set(0,-.105,.01);hindLower.castShadow=true;hindKnee.add(hindLower);
-        const hindPaw=new THREE.Mesh(ROGUE_GEOMETRIES.shadeFoot,ROGUE_ENEMY_MATS.shadeMantle);hindPaw.position.set(0,-.19,-.035);hindPaw.castShadow=true;hindKnee.add(hindPaw);
-        legs.push({hip:hindHip,knee:hindKnee,side,front:false,phase:side<0?Math.PI:0});
+        buildLeg({side,x:.27,y:-.12,z:-.34,hip:.16,knee:-.32,l1:.40,l2:.38,upper:G.shadeUpperLeg,lower:G.shadeLowerLeg,
+          muscle:{geo:G.shadeMuscle,y:-.02,z:.04,s:[1,1.25,1.4]},footZ:-.05,pawScale:[1,1,1],claws:[-.05,0,.05],front:true,phase:side<0?0:Math.PI});
+        buildLeg({side,x:.27,y:-.175,z:.55,hip:.80,knee:-1.50,l1:.50,l2:.48,upper:G.shadeThigh,lower:G.shadeShin,
+          muscle:{geo:G.shadeMuscle,y:-.04,z:.02,s:[1.15,1.6,1.35]},footZ:-.07,pawScale:[.95,1,1.2],claws:[-.04,.04],front:false,phase:side<0?Math.PI:0});
       }
-      visualRig={creature:true,body,torso,head,jaw,tail,legs,gaitPhase:Math.random()*Math.PI*2,phase:'idle',phaseTime:0,baseHeadX:.02};
+
+      // 尾は根元から後ろ下へ伸び、先で少し持ち上がる。
+      const tail=new THREE.Group();tail.position.set(0,-.09,.80);torso.add(tail);
+      part(tail,G.shadeTailBase,M.shadeMantle,0,-.086,.235,{r:[Math.PI/2+.35,0,0],cast:true});
+      part(tail,G.shadeTailTip,M.shadeMantle,0,-.129,.635,{r:[Math.PI/2-.25,0,0],cast:true});
+
+      visualRig={creature:true,body,torso,head,jaw,tail,legs,gaitPhase:Math.random()*Math.PI*2,phase:'idle',phaseTime:0,headBase,baseHeadX};
     }else{
       const body=new THREE.Mesh(boss?ROGUE_GEOMETRIES.bossBody:ROGUE_GEOMETRIES.body,mat); body.position.y=boss?1.65:1.0; body.scale.set(1,boss?1.35:1.12,.9); body.castShadow=true; g.add(body);
       const head=new THREE.Mesh(boss?ROGUE_GEOMETRIES.bossHead:ROGUE_GEOMETRIES.head,mat); head.position.set(0,boss?2.85:1.85,-.18); g.add(head);
@@ -2746,73 +2777,43 @@ window.startGame = function(NETINIT){
     warningMesh.rotation.x=-Math.PI/2;warningMesh.position.set(x,rogueFloorHeight(x,z)+.065,z);warningMesh.visible=false;warningMesh.renderOrder=4;sceneRef.add(warningMesh);
     return {kind,x,z,targetX:x,targetZ:z,targetYaw:0,hp,maxHp:hp,stage,boss:!!boss,optional:!!optional,rogueId,mesh:g,warningMesh,visualRig,phase:'idle',attackMode:'',aimX:x,aimZ:z,attackRadius:1.5,cooldown:1+Math.random(),dying:false,dieT:0,flash:0};
   }
+  // シェイドの表示アニメーション。AI・攻撃判定・同期はサーバー側で、ここは見た目だけを動かす。
+  // 関節の回転は基準姿勢(baseHip/baseKnee/baseHeadX)に加算し、設計した姿勢を毎フレーム消さない。
+  // rotation.x が正のとき: 脚は前へ振れ、頭は鼻先が上がる。顎は負で開く。
   function updateRogueEnemyVisual(e,dt){
-    const rig=e&&e.visualRig;if(!rig)return;
+    const rig=e&&e.visualRig;if(!rig||!rig.creature)return;
     if(rig.phase!==e.phase){rig.phase=e.phase;rig.phaseTime=0;}
-    if(rig.creature){
-      rig.phaseTime+=Math.max(0,Math.min(.08,dt||0));
-      const t=performance.now()*.001;
-      const lag=Math.hypot((e.targetX||0)-e.mesh.position.x,(e.targetZ||0)-e.mesh.position.z);
-      const moving=Math.max(0,Math.min(1,(lag-.008)*5.2));
-      rig.gaitPhase+=(dt||0)*(3.1+moving*8.2);
-      const gait=Math.sin(rig.gaitPhase);
-      const windup=e.phase==='windup'?Math.min(1,rig.phaseTime/.24):(e.phase==='charge'?1:0);
-      const lunge=e.phase==='recover'?Math.max(0,1-rig.phaseTime/.22):0;
-      const impact=Math.max(0,Math.min(1,(e.flash||0)/.22));
-      rig.body.position.y=.012+Math.abs(gait)*.023*moving+Math.sin(t*2.2+(e.rogueId.length||0))*.009-windup*.018+lunge*.025;
-      rig.body.position.z=-lunge*.13;
-      rig.body.rotation.x=-windup*.075+(e.phase==='charge'?-.13:0)+lunge*.085+impact*.035;
-      rig.body.rotation.z=.012*Math.sin(rig.gaitPhase)*moving+Math.sin(t*1.35)*.012+impact*.04;
-      rig.torso.rotation.x=Math.sin(rig.gaitPhase*2)*.018*moving+windup*.025-lunge*.04;
-      rig.torso.rotation.z=Math.sin(t*1.1)*.012+impact*.035;
-      rig.head.rotation.x=(rig.baseHeadX||0)+.025*Math.sin(t*1.9)*(1-moving)-windup*.15+lunge*.20-impact*.07;
-      rig.head.rotation.y=Math.sin(t*.66+(e.rogueId.length||0))*(.025+.025*(1-moving));
-      rig.tail.rotation.x=.045*Math.sin(t*2.4+rig.gaitPhase)+windup*.08-lunge*.12;
-      rig.tail.rotation.y=.08*Math.sin(t*1.25+rig.gaitPhase*.3);
-      if(rig.jaw)rig.jaw.rotation.x=.02+windup*.13+lunge*.28+impact*.06;
-      for(const leg of rig.legs){
-        const swing=Math.sin(rig.gaitPhase+leg.phase)*.39*moving;
-        leg.hip.rotation.x=swing+(windup?(leg.front?.12:-.045):0)+(lunge?(leg.front?-.16:.09):0);
-        leg.hip.rotation.z=leg.side*(.012*moving*Math.cos(rig.gaitPhase+leg.phase)+impact*.025);
-        leg.knee.rotation.x=Math.max(0,-swing)*.75+(windup&&leg.front?.10:0)+(lunge?(leg.front?.11:.025):0);
-      }
-      return;
-    }
-
-    rig.phaseTime+=Math.max(0,Math.min(.08,dt));
-    const t=performance.now()*.001;
+    rig.phaseTime+=Math.max(0,Math.min(.08,dt||0));
+    const t=performance.now()*.001,seed=(e.rogueId||'').length;
     const lag=Math.hypot((e.targetX||0)-e.mesh.position.x,(e.targetZ||0)-e.mesh.position.z);
     const moving=Math.max(0,Math.min(1,(lag-.008)*5.2));
-    rig.gaitPhase+=dt*(3.4+moving*8.5);
-    const gait=Math.sin(rig.gaitPhase);
-    const windup=e.phase==='windup'?Math.min(1,rig.phaseTime/.16):(e.phase==='charge'?1:0);
-    const strike=e.phase==='recover'?Math.max(0,1-rig.phaseTime/.19):0;
-    const recovery=e.phase==='recover'?Math.max(0,1-rig.phaseTime/.34):0;
+    rig.gaitPhase+=(dt||0)*(3.1+moving*8.2);
+    const windup=e.phase==='windup'?Math.min(1,rig.phaseTime/.24):(e.phase==='charge'?1:0);   // 身を低くして顎を開く
+    const lunge=e.phase==='recover'?Math.max(0,1-rig.phaseTime/.22):0;                        // 頭を突き出して噛みつく
     const impact=Math.max(0,Math.min(1,(e.flash||0)/.22));
-    const body=rig.body;
-    body.position.y=.018+Math.sin(t*2.35+(e.rogueId.length||0))*.014+Math.abs(gait)*.022*moving-windup*.035+strike*.025;
-    // 基準姿勢を保持する。以前は毎フレーム rotation.x を小さな値で上書きし、設計した前傾が消えていた。
-    body.rotation.x=(rig.baseBodyX||0)+.012*Math.sin(rig.gaitPhase*2)*moving-windup*.11+strike*.15+impact*.05;
-    body.rotation.z=.012*Math.sin(t*1.7)*(.35+moving)+impact*.10;
-    rig.torso.rotation.x=(rig.baseTorsoX||0)+.012*Math.sin(t*2.1)+moving*Math.sin(rig.gaitPhase*2)*.018-windup*.045+strike*.085;
-    rig.torso.rotation.z=(rig.baseTorsoZ||0)+.014*Math.sin(t*1.4)+impact*.06;
-    rig.head.rotation.x=(rig.baseHeadX||0)+.025*Math.sin(t*1.8)*(1-moving)-windup*.09+strike*.13-impact*.10;
-    rig.head.rotation.y=Math.sin(t*.72+(e.rogueId.length||0))*(.035+.035*(1-moving));
-    rig.head.rotation.z=(rig.baseHeadZ||0)+.012*Math.sin(t*1.15)+impact*.025;
-    if(rig.jaw)rig.jaw.rotation.x=.012*Math.sin(t*3.1)+(e.phase==='windup'?.025:0)+(e.phase==='recover'?.16*Math.max(0,1-rig.phaseTime/.2):0);
+    const gait=Math.sin(rig.gaitPhase),hb=rig.headBase;
+    rig.body.position.y=.012+Math.abs(gait)*.03*moving+Math.sin(t*2.2+seed)*.008-windup*.05+lunge*.02;
+    rig.body.position.z=-lunge*.16+windup*.04;
+    rig.body.rotation.x=-windup*.06+(e.phase==='charge'?-.06:0)+lunge*.07+impact*.03;
+    rig.body.rotation.z=.015*gait*moving+Math.sin(t*1.35)*.01+impact*.05;
+    rig.torso.rotation.x=Math.sin(rig.gaitPhase*2)*.025*moving+windup*.03-lunge*.05;
+    rig.torso.rotation.y=gait*.05*moving;
+    rig.torso.rotation.z=Math.sin(t*1.1)*.01+impact*.03;
+    rig.torso.scale.y=1+Math.sin(t*1.7+seed)*.012;
+    rig.head.position.set(hb[0],hb[1]+windup*.03-lunge*.05,hb[2]+windup*.07-lunge*.16);
+    rig.head.rotation.x=rig.baseHeadX+Math.sin(t*1.9+seed)*.025*(1-moving)+Math.sin(rig.gaitPhase*2)*.03*moving+windup*.2-lunge*.34-impact*.08;
+    rig.head.rotation.y=Math.sin(t*.66+seed)*(.03+.04*(1-moving))-rig.torso.rotation.y*.7;
+    rig.jaw.rotation.x=-(.03+windup*.75+lunge*.22+Math.max(0,Math.sin(t*1.3+seed))*.02);
+    rig.tail.rotation.x=Math.sin(t*2.4+rig.gaitPhase)*.05-windup*.18+lunge*.2;
+    rig.tail.rotation.y=Math.sin(t*1.25+rig.gaitPhase*.3)*.10+gait*.12*moving;
     for(const leg of rig.legs){
-      const swing=Math.sin(rig.gaitPhase+leg.phase)*.38*moving;
-      leg.hip.rotation.x=(rig.baseHipX||0)+swing+windup*(leg.side<0?.11:-.06)+strike*(leg.side<0?-.10:.14);
-      leg.hip.rotation.z=leg.side*(.015*moving*Math.cos(rig.gaitPhase+leg.phase)+impact*.05);
-      leg.knee.rotation.x=(rig.baseKneeX||0)+Math.max(0,-swing)*.58+strike*.08;
-    }
-    for(const side of [-1,1]){
-      const arm=rig.arms[side];if(!arm)continue;
-      const idleSwing=Math.sin(rig.gaitPhase+(side<0?0:Math.PI))*.20*moving;
-      const attackBias=side>0?1:.68;
-      arm.shoulder.rotation.x=idleSwing-windup*(.72*attackBias)+strike*(1.08*attackBias)+impact*.22;
-      arm.shoulder.rotation.z=side*(.12+.035*Math.sin(t*1.6)+moving*.05);
-      arm.elbow.rotation.x=-.12-windup*.12+strike*.28+impact*.16;
+      const ph=rig.gaitPhase+leg.phase;
+      const swing=Math.sin(ph)*(leg.front?.42:.36)*moving;
+      const lift=Math.max(0,Math.cos(ph))*moving;   // 脚が前へ運ばれる間だけ膝を畳む
+      leg.hip.rotation.x=leg.baseHip+swing+windup*(leg.front?.14:.06)+lunge*(leg.front?.22:-.12);
+      leg.hip.rotation.z=leg.side*(.015*moving*Math.cos(ph)+impact*.03);
+      leg.knee.rotation.x=leg.baseKnee-lift*(leg.front?.75:.65)-windup*.22+(leg.front?lunge*.05:0);
+      leg.foot.rotation.x=-(leg.hip.rotation.x+leg.knee.rotation.x)-lift*.25;
     }
   }
   function makeRogueChest(x,z){
@@ -10191,7 +10192,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=70.4-maw-creature"></script>
+<script src="shared.js?v=70.5-shade-beast"></script>
 <script src="boot.js"></script>
 </body>
 </html>
