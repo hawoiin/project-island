@@ -3,7 +3,7 @@ const assert=require('assert');
 const fs=require('fs');
 const path=require('path');
 const html=fs.readFileSync(path.join(__dirname,'../public/index.html'),'utf8');
-// v70.5: 断面リングで作る連続した体・頭・顎、先細りの太い四肢、趾行の後脚、光る目。
+// v70.6: 断面リングで作る連続した体・頭・顎、先細りの太い四肢、趾行の後脚、光る目。
 assert.match(html,/function rogueRingLoftGeometry\(rings,topHex,bottomHex\)/);
 assert.doesNotMatch(html,/rogueLengthwiseLoftGeometry/);
 for(const name of ['shadeBody','shadeSkull','shadeJaw'])assert.match(html,new RegExp(name+':rogueRingLoftGeometry'));

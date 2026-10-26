@@ -36,17 +36,28 @@ check('体・頭・顎の面はすべて外向き（符号付き体積が正）'
 });
 const rig=api.build();
 const rot=(y,z,a)=>[y*Math.cos(a)-z*Math.sin(a),y*Math.sin(a)+z*Math.cos(a)];
-function footBottom(leg){
-  let y=rig.torso.position.y+leg.hip.position.y,z=leg.hip.position.z;const a1=leg.hip.rotation.x;
-  let [dy,dz]=rot(leg.knee.position.y,leg.knee.position.z,a1);y+=dy;z+=dz;const a2=a1+leg.knee.rotation.x;
-  [dy,dz]=rot(leg.foot.position.y,leg.foot.position.z,a2);y+=dy;z+=dz;const a3=a2+leg.foot.rotation.x;
-  [dy,dz]=rot(-.07,0,a3);y+=dy;
-  return (y+rig.body.position.y)*rig.body.scale.x;
+// 関節の連鎖を (y,z) 平面で辿り、各関節と足裏の位置を返す（torso 座標）。
+function trace(leg){
+  let y=rig.torso.position.y,z=0,ang=0;const pts=[];
+  for(const j of [...leg.joints,leg.foot]){const [dy,dz]=rot(j.position.y,j.position.z,ang);y+=dy;z+=dz;pts.push({y,z});ang+=j.rotation.x;}
+  const [by]=rot(-.07,0,ang);
+  return {pts,bottom:(y+by+rig.body.position.y)*rig.body.scale.x};
 }
+const footBottom=leg=>trace(leg).bottom;
 check('四肢4本・メッシュ数が予算内',()=>{
   assert.strictEqual(rig.legs.length,4);
   let n=0;(function c(o){if(o instanceof Mesh)n++;o.children.forEach(c);})(rig.body);
   assert.ok(n<=60,'メッシュ数が多すぎる: '+n);
+});
+check('後脚は4区間で、膝は前・かかと(飛節)は後ろへ突き出る。前脚は肘が後ろへ出る',()=>{
+  const hind=rig.legs.find(l=>!l.front),front=rig.legs.find(l=>l.front);
+  assert.strictEqual(hind.joints.length,3,'後脚は 股関節・膝・飛節 の3関節');
+  const hp=trace(hind).pts.slice(1);   // [膝, 飛節, 足首]
+  assert.ok(hp[0].z<hind.hip.position.z-.1,'膝が腰より前に出ていない');
+  assert.ok(hp[1].z>hp[0].z+.15,'かかとが膝より後ろにない');
+  assert.ok(hp[1].z>hp[2].z,'かかとが足先より後ろへ突き出ていない');
+  const fp=trace(front).pts.slice(1);  // [肘, 足首]
+  assert.ok(fp[0].z>front.hip.position.z+.08,'肘が肩より後ろへ出ていない');
 });
 check('静止時に4本の足裏が床に付く',()=>{
   for(const l of rig.legs)assert.ok(Math.abs(footBottom(l))<.02,`足裏の高さ ${footBottom(l).toFixed(3)}`);
