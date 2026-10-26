@@ -14,19 +14,30 @@ class BufferGeometry{setAttribute(n,a){(this.attrs=this.attrs||{})[n]=a;}compute
 class F32{constructor(a,n){this.array=a;this.itemSize=n;}}
 const geo=()=>class{constructor(...a){this.args=a;}};
 const Mat=class{constructor(o){Object.assign(this,o);}};
-global.THREE={Color,Group,Mesh,BufferGeometry,Float32BufferAttribute:F32,CylinderGeometry:geo(),IcosahedronGeometry:geo(),BoxGeometry:geo(),ConeGeometry:geo(),MeshStandardMaterial:Mat,MeshBasicMaterial:Mat};
+global.THREE={Color,Group,Mesh,BufferGeometry,Float32BufferAttribute:F32,CylinderGeometry:geo(),IcosahedronGeometry:geo(),OctahedronGeometry:geo(),BoxGeometry:geo(),ConeGeometry:geo(),MeshStandardMaterial:Mat,MeshBasicMaterial:Mat};
 global.performance={now:()=>0};
 const code=`${slice('  function rogueRingLoftGeometry(','  const ROGUE_GEOMETRIES={')}
-const ROGUE_GEOMETRIES={${slice('    shadeBody:rogueRingLoftGeometry','  };\n  const ROGUE_ATTACK_WARNING_GEO')}};
-const ROGUE_ENEMY_MATS={${slice('    shade:new THREE.MeshStandardMaterial({color:0x514139','    crawler:new THREE.MeshStandardMaterial').replace(/,\s*$/,'')}};
+const ROGUE_GEOMETRIES={${slice('    shadeTorso:rogueRingLoftGeometry','  };\n  const ROGUE_ATTACK_WARNING_GEO')}};
+const ROGUE_ENEMY_MATS={${slice('    shade:new THREE.MeshStandardMaterial({color:0x293044','    crawler:new THREE.MeshStandardMaterial').replace(/,\s*$/,'')}};
 function build(){const g=new THREE.Group();let visualRig=null;{${slice('      const M=ROGUE_ENEMY_MATS,G=ROGUE_GEOMETRIES;',"    }else{\n      const body=new THREE.Mesh(boss?")}}return visualRig;}
 ${slice('  function updateRogueEnemyVisual(e,dt){','  function makeRogueChest')}
 return {ROGUE_GEOMETRIES,build,updateRogueEnemyVisual};`;
 const api=new Function(code)();
 function check(name,fn){try{fn();console.log('PASS '+name);}catch(e){console.error('FAIL '+name+': '+e.message);process.exitCode=1;}}
 
-check('体・頭・顎の面はすべて外向き（符号付き体積が正）',()=>{
-  for(const name of ['shadeBody','shadeSkull','shadeJaw']){
+const rig=api.build();
+const rot=(y,z,a)=>[y*Math.cos(a)-z*Math.sin(a),y*Math.sin(a)+z*Math.cos(a)];
+// (y,z) 平面で関節の連鎖を辿る。nodes は親から順の関節群、tip は最後の関節の局所座標の点。
+function trace(nodes,tip){
+  let y=rig.pelvis.position.y,z=0,ang=0;
+  for(const n of nodes){const [dy,dz]=rot(n.position.y,n.position.z,ang);y+=dy;z+=dz;ang+=n.rotation.x;}
+  const [ty,tz]=rot(tip[0],tip[1],ang);
+  return {y:(y+ty+rig.body.position.y)*rig.body.scale.x,z:(z+tz)*rig.body.scale.x};
+}
+const footBottom=l=>trace([l.hip,l.knee,l.foot],[-.07,0]).y;
+const handTip=a=>trace([rig.torso,a.shoulder,a.elbow,a.wrist],[-.36,0]);
+check('胴・頭・顎の面はすべて外向き（符号付き体積が正）',()=>{
+  for(const name of ['shadeTorso','shadeSkull','shadeJaw']){
     const P=api.ROGUE_GEOMETRIES[name].attrs.position.array;let vol=0;
     for(let i=0;i<P.length;i+=9){const a=P.slice(i,i+3),b=P.slice(i+3,i+6),c=P.slice(i+6,i+9);
       vol+=a[0]*(b[1]*c[2]-b[2]*c[1])-a[1]*(b[0]*c[2]-b[2]*c[0])+a[2]*(b[0]*c[1]-b[1]*c[0]);}
@@ -34,49 +45,47 @@ check('体・頭・顎の面はすべて外向き（符号付き体積が正）'
     assert.ok(api.ROGUE_GEOMETRIES[name].attrs.color,name+' に頂点色がない');
   }
 });
-const rig=api.build();
-const rot=(y,z,a)=>[y*Math.cos(a)-z*Math.sin(a),y*Math.sin(a)+z*Math.cos(a)];
-// 関節の連鎖を (y,z) 平面で辿り、各関節と足裏の位置を返す（torso 座標）。
-function trace(leg){
-  let y=rig.torso.position.y,z=0,ang=0;const pts=[];
-  for(const j of [...leg.joints,leg.foot]){const [dy,dz]=rot(j.position.y,j.position.z,ang);y+=dy;z+=dz;pts.push({y,z});ang+=j.rotation.x;}
-  const [by]=rot(-.07,0,ang);
-  return {pts,bottom:(y+by+rig.body.position.y)*rig.body.scale.x};
-}
-const footBottom=leg=>trace(leg).bottom;
-check('四肢4本・メッシュ数が予算内',()=>{
-  assert.strictEqual(rig.legs.length,4);
+check('二足・二腕で、メッシュ数が予算内',()=>{
+  assert.strictEqual(rig.legs.length,2);assert.strictEqual(rig.arms.length,2);
   let n=0;(function c(o){if(o instanceof Mesh)n++;o.children.forEach(c);})(rig.body);
   assert.ok(n<=60,'メッシュ数が多すぎる: '+n);
 });
-check('後脚は4区間で、膝は前・かかと(飛節)は後ろへ突き出る。前脚は肘が後ろへ出る',()=>{
-  const hind=rig.legs.find(l=>!l.front),front=rig.legs.find(l=>l.front);
-  assert.strictEqual(hind.joints.length,3,'後脚は 股関節・膝・飛節 の3関節');
-  const hp=trace(hind).pts.slice(1);   // [膝, 飛節, 足首]
-  assert.ok(hp[0].z<hind.hip.position.z-.1,'膝が腰より前に出ていない');
-  assert.ok(hp[1].z>hp[0].z+.15,'かかとが膝より後ろにない');
-  assert.ok(hp[1].z>hp[2].z,'かかとが足先より後ろへ突き出ていない');
-  const fp=trace(front).pts.slice(1);  // [肘, 足首]
-  assert.ok(fp[0].z>front.hip.position.z+.08,'肘が肩より後ろへ出ていない');
-});
-check('静止時に4本の足裏が床に付く',()=>{
+check('静止時に両足の足裏が床に付く',()=>{
   for(const l of rig.legs)assert.ok(Math.abs(footBottom(l))<.02,`足裏の高さ ${footBottom(l).toFixed(3)}`);
 });
-const e={phase:'idle',targetX:0,targetZ:0,mesh:{position:{x:0,z:0}},rogueId:'abc',flash:0,visualRig:rig};
-check('歩行中も足が床に潜らず、有限値のまま動く',()=>{
-  e.targetX=.5;let min=9,max=-9;
-  for(let i=0;i<240;i++){global.performance.now=()=>i*40;api.updateRogueEnemyVisual(e,.04);
-    for(const l of rig.legs){const y=footBottom(l);min=Math.min(min,y);max=Math.max(max,y);
-      for(const o of [l.hip,l.knee,l.foot])for(const k of ['x','y','z'])assert.ok(Number.isFinite(o.rotation[k]));}}
-  assert.ok(min>-.03,'足が床に潜る: '+min.toFixed(3));
-  assert.ok(max>.1,'歩行で足が持ち上がっていない');
+check('背を丸めた人型: 胴が前傾し、頭が骨盤より前へ出て、腕が長く膝の近くまで届く',()=>{
+  assert.ok(rig.baseLean<-.4,'胴が前傾していない');
+  const headZ=trace([rig.torso,rig.head],[0,0]).z;
+  assert.ok(headZ<-.35,'頭が前へ突き出ていない: '+headZ.toFixed(2));
+  for(const a of rig.arms){
+    const h=handTip(a);
+    assert.ok(h.y>.1&&h.y<.8,'指先の高さが不自然: '+h.y.toFixed(2));
+  }
+  const kneeY=trace([rig.legs[0].hip,rig.legs[0].knee],[0,0]).y;
+  assert.ok(handTip(rig.arms[0]).y<kneeY+.2,'腕が膝の高さまで届いていない');
 });
-check('予備動作で顎が開き、噛みつきで頭が前へ突き出る',()=>{
+const e={phase:'idle',targetX:0,targetZ:0,mesh:{position:{x:0,z:0}},rogueId:'abc',flash:0,visualRig:rig};
+check('歩行中も足と指先が床に潜らず、有限値のまま動く',()=>{
+  e.targetX=.5;let minF=9,minH=9,maxF=-9;
+  for(let i=0;i<240;i++){global.performance.now=()=>i*40;api.updateRogueEnemyVisual(e,.04);
+    for(const l of rig.legs){const y=footBottom(l);minF=Math.min(minF,y);maxF=Math.max(maxF,y);
+      for(const o of [l.hip,l.knee,l.foot])for(const k of ['x','y','z'])assert.ok(Number.isFinite(o.rotation[k]));}
+    for(const a of rig.arms){minH=Math.min(minH,handTip(a).y);
+      for(const o of [a.shoulder,a.elbow,a.wrist])for(const k of ['x','y','z'])assert.ok(Number.isFinite(o.rotation[k]));}}
+  assert.ok(minF>-.03,'足が床に潜る: '+minF.toFixed(3));
+  assert.ok(maxF>.1,'歩行で足が持ち上がっていない');
+  assert.ok(minH>-.02,'指先が床に潜る: '+minH.toFixed(3));
+});
+check('予備動作で腕を引いて顎を開き、噛みつきで腕を振り抜いて頭を突き出す',()=>{
   e.targetX=0;e.phase='windup';
   for(let i=0;i<12;i++){global.performance.now=()=>i*40;api.updateRogueEnemyVisual(e,.04);}
-  assert.ok(rig.jaw.rotation.x<-.4,'顎が開いていない（開くのは負の回転）');
-  e.phase='recover';api.updateRogueEnemyVisual(e,.0);
-  assert.ok(rig.head.position.z<rig.headBase[2]-.1,'頭が前へ突き出ていない');
-  assert.ok(rig.head.rotation.x<rig.baseHeadX,'噛みつきで鼻先が下がっていない');
+  const back=rig.arms[0].shoulder.rotation.x;
+  assert.ok(back<rig.arms[0].baseS-.8,'腕が後ろへ引かれていない');
+  assert.ok(rig.jaw.rotation.x<-.5,'顎が開いていない（開くのは負の回転）');
+  assert.ok(rig.torso.rotation.x>rig.baseLean+.2,'胴が反っていない');
+  e.phase='recover';api.updateRogueEnemyVisual(e,0);
+  assert.ok(rig.arms[0].shoulder.rotation.x>rig.arms[0].baseS+.8,'腕が前へ振り抜かれていない');
+  assert.ok(rig.torso.rotation.x<rig.baseLean-.2,'胴が前へ倒れていない');
+  assert.ok(rig.head.rotation.x<rig.baseHeadX,'噛みつきで頭が下がっていない');
 });
 if(!process.exitCode)console.log('Rogue shade rig checks passed.');

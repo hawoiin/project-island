@@ -31,5 +31,5 @@ check('枝道の敵は任意で、倒さなくても本線の進行を止めな�
 check('枝道の敵はミニマップに残り、本線の残り数には含めない',html.includes('e.optional?1.25:1.7')&&html.includes('stage===rogueRun.stage&&!e.optional&&e.hp>0&&!e.dying'));
 check('死亡時は未精算の欠片と装備を失い、島へ帰還する',html.includes('leaveRogueDungeon(false,true)')&&html.includes('冒険失敗'));
 check('通常洞窟の半径13.5m制限は維持',/const CAVE_ROOM_R = 13\.5/.test(html)&&/const CAVE_ROOM_RADIUS = 13\.5/.test(shared));
-check('v70.6バージョン表示とキャッシュ更新が反映される',/<div id="versionLabel"[^>]*>v70\.6<\/div>/.test(html)&&html.includes('shared.js?v=70.6-shade-digitigrade'));
+check('v70.7バージョン表示とキャッシュ更新が反映される',/<div id="versionLabel"[^>]*>v70\.7<\/div>/.test(html)&&html.includes('shared.js?v=70.7-shade-shadow-concept'));
 if(failures)process.exit(1);console.log('Rogue dungeon checks passed.');
