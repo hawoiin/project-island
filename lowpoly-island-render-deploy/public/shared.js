@@ -141,22 +141,38 @@
   // 浅瀬は水深を確保できる場所(-1.0m以下)に限定し、深場では海底から約1.5m上を保つ。
   function jellyHeight(x, z) { return Math.min(-0.8, islandHeight(x, z) + 1.5); }
 
-  // ---- ボス「遺跡の石の守護者」(島に1体。倒すと一定時間後に復活) ----
-  const BOSS_MAX_HP = 60;
-  const BOSS_RADIUS = 1.7;          // 体の当たり判定(m)
-  const BOSS_RESPAWN_MS = 180000;
-  const BOSS_AGGRO = 17;            // 眠っている間にこの距離へ入ると目覚める
-  const BOSS_CHASE_RANGE = 28;      // 戦闘中に追い続ける距離
-  const BOSS_LEASH = 34;            // 持ち場(home)からこれ以上は離れない
-  const BOSS_SPEED = 2.3;
-  const BOSS_HIT_RANGE = 9;         // プレイヤーの攻撃が届く距離(体の中心まで)
-  const BOSS_SLAM_RANGE = 5.5;      // これより近ければ叩きつけ、遠ければ落石
-  // 攻撃の仕様: r=範囲 dur=予告の長さ(秒) dmg=プレイヤーへのダメージ。phase2 は体力が半分以下のとき
-  const BOSS_ATTACKS = {
-    slam: { r: [4.8, 5.8], dur: [1.1, 0.9], dmg: 24 },
-    rock: { r: [2.4, 2.4], dur: [1.5, 1.2], dmg: 16, maxZones: [3, 5] },
+  // ---- ボス(島に種類ごとに1体。倒すと respawnMs 後に復活する) ----
+  // 種類を増やすときは BOSS_DEFS に1項目足し、持ち場を BOSS_HOME_FINDERS に足す(動きはこの表だけで決まる)。
+  //   radius=体の当たり判定(m) aggro=眠っている間にこの距離へ入ると目覚める chaseRange=戦闘中に追い続ける距離
+  //   leash=持ち場(home)からこれ以上は離れない hitRange=プレイヤーの攻撃が届く距離(体の中心まで)
+  //   closeRange 以内なら closeAttack、遠ければ farAttack を使う
+  //   recover/cooldown=攻撃後の硬直と次の攻撃までの間(秒。[通常, phase2])
+  // attacks の spec: shape=予告の形(self=自分の足元 / targets=狙われた人の足元 / lane=前方への突進の通り道)
+  //   r=範囲 dur=予告の長さ(秒) dmg=プレイヤーへのダメージ。配列は [通常, phase2](phase2 は体力が半分以下のとき)
+  const BOSS_DEFS = {
+    guardian: {
+      name: '遺跡の石の守護者', maxHp: 60, radius: 1.7, respawnMs: 180000,
+      aggro: 17, chaseRange: 28, leash: 34, speed: 2.3, hitRange: 9,
+      closeAttack: 'slam', farAttack: 'rock', closeRange: 5.5,
+      recover: [1.0, 0.7], cooldown: [2.0, 1.2],
+      attacks: {
+        slam: { shape: 'self',    r: [4.8, 5.8], dur: [1.1, 0.9], dmg: 24 },
+        rock: { shape: 'targets', r: [2.4, 2.4], dur: [1.5, 1.2], dmg: 16, maxZones: [3, 5] },
+      },
+    },
+    bear: {
+      name: '荒ぶる大熊', maxHp: 50, radius: 1.5, respawnMs: 150000,
+      aggro: 20, chaseRange: 30, leash: 38, speed: 3.2, hitRange: 8,
+      closeAttack: 'slam', farAttack: 'charge', closeRange: 4.5,
+      recover: [0.9, 0.55], cooldown: [1.7, 1.0],
+      attacks: {
+        slam:   { shape: 'self', r: [3.6, 4.4], dur: [0.9, 0.7], dmg: 20 },
+        charge: { shape: 'lane', r: [2.0, 2.3], dur: [1.3, 1.0], dmg: 22, len: [13, 16] },
+      },
+    },
   };
-  const BOSS_STATE_CODE = { idle: 0, chase: 1, slam: 2, rock: 3, recover: 4 }; // スナップショットで送る数字
+  const BOSS_STATE_CODE = { idle: 0, chase: 1, slam: 2, rock: 3, recover: 4, charge: 5 }; // スナップショットで送る数字
+  const BOSS_TYPES = Object.keys(BOSS_DEFS);
 
   // ---- 洞窟の位置(外観・入口判定はクライアント、立入禁止の判定はここを共有する) ----
   // 旧(-190,55)は標高-6で海中だったため、平坦で草地の色になる北西(-150,-195)へ移動した
@@ -1008,8 +1024,8 @@
     return locations;
   }
 
-  // ボスの持ち場: 洞窟から離れた遺跡のうち、スタート地点から最も遠い所(seedから再現できる)
-  function getBossHome(seed) {
+  // 石の守護者の持ち場: 洞窟から離れた遺跡のうち、スタート地点から最も遠い所(seedから再現できる)
+  function getGuardianHome(seed) {
     let best = null, bd = -1;
     for (const r of getRuinLocations(seed, 6)) {
       if (isInsideCaveArea(r.x, r.z, 8)) continue;
@@ -1023,6 +1039,46 @@
     }
     return { x: 0, z: -40 };
   }
+
+  // 大熊の持ち場: 守護者・スタート地点・遺跡・宝箱・灯台・泉・野営地・洞窟から離れた、平らな草地(seedから再現できる)。
+  // 他の配置の「避ける場所」には加えない(加えると既存ワールドの宝箱・野営地などの位置が変わるため)。
+  function getBearHome(seed) {
+    const random = mulberry32(((seed >>> 0) ^ 0x2c1b3a95) >>> 0);
+    const guardian = getGuardianHome(seed);
+    const ruins = getRuinLocations(seed, 6);
+    const chests = getChestLocations(seed, ruins, MAX_CHESTS);
+    const zones = getFeatureClearZones(seed);
+    const flat = (x, z) => {
+      const y = islandHeight(x, z);
+      if (y < 1.8) return false;
+      for (let k = 0; k < 4; k++) if (Math.abs(islandHeight(x + Math.cos(k * Math.PI / 2) * 4, z + Math.sin(k * Math.PI / 2) * 4) - y) > 1.2) return false;
+      return true;
+    };
+    const ok = (x, z, strict) => {
+      if (!flat(x, z) || isInsideCaveArea(x, z, 14)) return false;
+      if (Math.hypot(x - guardian.x, z - guardian.z) < (strict ? 50 : 30)) return false;
+      if (Math.hypot(x, z - 6) < (strict ? 40 : 28)) return false;
+      for (const r of ruins) if (Math.hypot(x - r.x, z - r.z) < (strict ? 18 : 12)) return false;
+      for (const c of chests) if (c && Math.hypot(x - c.x, z - c.z) < 10) return false;
+      for (const zn of zones) if (Math.hypot(x - zn.x, z - zn.z) < zn.r + 12) return false;
+      return true;
+    };
+    for (const strict of [true, false]) {
+      for (let attempt = 0; attempt < 80; attempt++) {
+        const ang = random() * Math.PI * 2, r = WORLD_SIZE * (0.12 + random() * 0.24);
+        const x = Math.round(Math.cos(ang) * r * 100) / 100, z = Math.round(Math.sin(ang) * r * 100) / 100;
+        if (ok(x, z, strict)) return { x, z };
+      }
+    }
+    for (let a = 0; a < 64; a++) { // 条件を満たす所がなかったときの保険(洞窟と守護者だけは避ける)
+      const x = Math.cos(a) * WORLD_SIZE * 0.2, z = Math.sin(a) * WORLD_SIZE * 0.2;
+      if (islandHeight(x, z) > 1.5 && !isInsideCaveArea(x, z, 8) && Math.hypot(x - guardian.x, z - guardian.z) > 20) return { x, z };
+    }
+    return { x: 0, z: 40 };
+  }
+
+  const BOSS_HOME_FINDERS = { guardian: getGuardianHome, bear: getBearHome };
+  function getBossHome(seed, type) { return BOSS_HOME_FINDERS[type || 'guardian'](seed); }
 
   // ---- 建築の設置ルール ----
   const BUILD_RADIUS = { campfire: 0.9, hut: 2.2, cabin: 2.2, fence: 1.0, gate: 1.0, floor: 1.15 }; // 当たりの大きさ(m)
@@ -1469,7 +1525,7 @@
   }
 
   // 緊急脱出の到着地点をサーバー/ソロ共通で選ぶ。建築物や閉じた柵の内側、海、洞窟、敵の近くを避ける。
-  function findSafeEscapePoint(originX, originZ, structures, enemies, boss, seed) {
+  function findSafeEscapePoint(originX, originZ, structures, enemies, bosses, seed) {
     const list = Array.from(structures || []);
     const loops = getClosedFenceLoops(list);
     const avoidStructures = list.map(s => ({
@@ -1477,7 +1533,7 @@
       barrier:(s.buildId === 'fence' || (s.buildId === 'gate' && s.open !== true)) ? fenceEndpoints(s) : null
     }));
     const aliveEnemies = Array.from(enemies || []).filter(e => e && e.alive && Number.isFinite(e.x) && Number.isFinite(e.z));
-    const bossAlive = boss && boss.alive && Number.isFinite(boss.x) && Number.isFinite(boss.z);
+    const aliveBosses = Array.from(bosses || []).filter(b => b && b.alive && Number.isFinite(b.x) && Number.isFinite(b.z));
     const maxRadius = WORLD_SIZE * 0.45;
     const ox = Number.isFinite(originX) ? originX : 0;
     const oz = Number.isFinite(originZ) ? originZ : 6;
@@ -1492,7 +1548,7 @@
           if (pointSegmentDistanceXZ(x, z, item.barrier[0], item.barrier[1]) < 2.8) return false;
         } else if (distanceXZ(x, z, s.x, s.z) < item.radius) return false;
       }
-      if (bossAlive && distanceXZ(x, z, boss.x, boss.z) < 12) return false;
+      for (const b of aliveBosses) if (distanceXZ(x, z, b.x, b.z) < 12) return false;
       for (const e of aliveEnemies) if (distanceXZ(x, z, e.x, e.z) < 7) return false;
       return true;
     }
@@ -1519,7 +1575,7 @@
   }
 
   // ---- 体の当たり判定(プレイヤー・敵が重ならないための半径と押し出し) ----
-  const BODY_RADIUS = { player: 0.45, wolf: 0.5, boar: 0.6, lizard: 0.6, crab: 0.4, jelly: 0.4, wolfClassic: 0.5, boarClassic: 0.6, raider: 0.48, campGuard: 0.45, boss: BOSS_RADIUS };
+  const BODY_RADIUS = { player: 0.45, wolf: 0.5, boar: 0.6, lizard: 0.6, crab: 0.4, jelly: 0.4, wolfClassic: 0.5, boarClassic: 0.6, raider: 0.48, campGuard: 0.45 }; // ボスの体の大きさは BOSS_DEFS[type].radius
   // 点 (x,z) を、中心 (ox,oz) から minDist 以上離れるように押し出す移動量。離れていれば null
   function bodyPush(x, z, ox, oz, minDist) {
     const dx = x - ox, dz = z - oz;
@@ -1601,7 +1657,7 @@
       this.chests = new Set();       // 開封済みの宝箱index
       this.nextSid = 1;
       this.enemies = [];
-      this.boss = this.newBoss();
+      this.bosses = this.newBosses(); // 種類 -> ボスの状態
       this.underwaterLayout = getUnderwaterLayout(this.seed);
       this.underwaterResources = this.underwaterLayout.resources;
       this.chestLocations = getChestLocations(this.seed, getRuinLocations(this.seed, 6), MAX_CHESTS);
@@ -1824,7 +1880,7 @@
         structures: [...this.structures.values()],
         chests: [...this.chests],
         enemies: this.enemies.filter(e => e.alive).map(e => this.enemyInfo(e)),
-        boss: this.boss.alive ? this.bossInfo() : null,
+        bosses: [...this.bosses.values()].filter(b => b.alive).map(b => this.bossInfo(b)),
         players: [...this.clients.values()].filter(c => c.joined && c.id !== id).map(c => ({ id: c.id, name: c.name })),
       };
     }
@@ -2407,7 +2463,7 @@
           }
           const originX = c.cave >= 0 ? 0 : c.x;
           const originZ = c.cave >= 0 ? 6 : c.z;
-          const point = findSafeEscapePoint(originX, originZ, this.structures.values(), this.enemies, this.boss, this.seed);
+          const point = findSafeEscapePoint(originX, originZ, this.structures.values(), this.enemies, this.bosses.values(), this.seed);
           if (!point) { reply({ ok:false, reason:'noSafePoint' }); return; }
           const until = now + 180000;
           this.emergencyEscapeCooldowns.set(identity, until);
@@ -2652,7 +2708,7 @@
         if (now >= v.at) { this.taken.delete(key); this.out.broadcast({ t: 'respawn', key }); }
       }
       this.updateEnemies(dt, now);
-      this.updateBoss(dt, now);
+      for (const b of this.bosses.values()) this.updateBoss(b, dt, now);
       for(const room of this.rogueRooms.values()) this.updateRogueRoom(room, dt, now);
       this.tickCount++;
       if (this.tickCount % 2 === 0) this.broadcastSnap();
@@ -2873,122 +2929,125 @@
       const e = [];
       for (const en of this.enemies) if (en.alive) e.push([en.id, r2(en.x), r2(en.z), r2(en.ry), en.awake ? 1 : 0, en.mv ? (en.mvPh + 1) * 10 + MOVE_ID[en.mv] : 0]);
       const snap = { t: 'snap', e, p: players };
-      const b = this.boss;
-      if (b.alive) snap.b = [r2(b.x), r2(b.z), r2(b.ry), BOSS_STATE_CODE[b.state], b.hp];
+      const bs = [];
+      for (const b of this.bosses.values()) if (b.alive) bs.push([b.id, r2(b.x), r2(b.z), r2(b.ry), BOSS_STATE_CODE[b.state], b.hp]);
+      if (bs.length) snap.b = bs;
       this.out.broadcast(snap);
     }
 
-    // ---- ボス ----
-    newBoss() {
-      const home = getBossHome(this.seed);
+    // ---- ボス(種類ごとの違いは BOSS_DEFS の表だけ。ここは全種類共通の動き) ----
+    newBoss(type) {
+      const def = BOSS_DEFS[type], home = getBossHome(this.seed, type);
       return {
-        alive: true, hp: BOSS_MAX_HP, maxHp: BOSS_MAX_HP, x: home.x, z: home.z, ry: 0, homeX: home.x, homeZ: home.z,
-        state: 'idle', timer: 0, cooldown: 1.5, lostTarget: 0, zones: [], atk: null, respawnAt: 0,
+        id: type, type, alive: true, hp: def.maxHp, maxHp: def.maxHp, x: home.x, z: home.z, ry: 0, homeX: home.x, homeZ: home.z,
+        state: 'idle', timer: 0, cooldown: 1.5, lostTarget: 0, zones: [], atk: null, dash: null, respawnAt: 0,
       };
     }
 
-    bossInfo() {
-      const b = this.boss;
-      return { x: r2(b.x), z: r2(b.z), ry: r2(b.ry), hp: b.hp, maxHp: b.maxHp, state: BOSS_STATE_CODE[b.state] };
+    newBosses() { return new Map(BOSS_TYPES.map(type => [type, this.newBoss(type)])); }
+
+    bossInfo(b) {
+      return { id: b.id, x: r2(b.x), z: r2(b.z), ry: r2(b.ry), hp: b.hp, maxHp: b.maxHp, state: BOSS_STATE_CODE[b.state] };
     }
 
-    bossPhase() { return this.boss.hp <= this.boss.maxHp / 2 ? 1 : 0; }
+    bossPhase(b) { return b.hp <= b.maxHp / 2 ? 1 : 0; }
 
     // ボスに狙われうるプレイヤー(地上にいる生存者)
-    bossTargets(maxDist) {
-      const b = this.boss, list = [];
+    bossTargets(b, maxDist) {
+      const list = [];
       for (const c of this.clients.values()) {
         if (!c.joined || c.dead || c.cave >= 0 || !c.hasState) continue;
         const d = Math.hypot(c.x - b.x, c.z - b.z);
-        if (d <= maxDist && Math.hypot(c.x - b.homeX, c.z - b.homeZ) <= BOSS_LEASH + 6) list.push({ c, d });
+        if (d <= maxDist && Math.hypot(c.x - b.homeX, c.z - b.homeZ) <= BOSS_DEFS[b.type].leash + 6) list.push({ c, d });
       }
       return list.sort((p, q) => p.d - q.d);
     }
 
     hitBoss(c, msg) {
-      const b = this.boss;
-      if (!b.alive || !c.joined || c.dead || c.cave >= 0 || !c.hasState) return;
+      const b = this.bosses.get(typeof msg.id === 'string' ? msg.id : 'guardian'); // id なしは守護者(旧クライアント互換)
+      if (!b || !b.alive || !c.joined || c.dead || c.cave >= 0 || !c.hasState) return;
+      const def = BOSS_DEFS[b.type];
       const dx = b.x - c.x, dz = b.z - c.z, d = Math.hypot(dx, dz);
-      if (d > BOSS_HIT_RANGE) return;
+      if (d > def.hitRange) return;
       const now = Date.now();
-      if (now - (c.lastHitAt.get(-1) || 0) < HIT_COOLDOWN_MS) return; // 敵の id は 0 以上なので、ボスは -1 で記録する
-      c.lastHitAt.set(-1, now);
+      const hitKey = -1 - BOSS_TYPES.indexOf(b.type); // 敵の id は 0 以上なので、ボスは負の数で記録する(守護者は -1)
+      if (now - (c.lastHitAt.get(hitKey) || 0) < HIT_COOLDOWN_MS) return;
+      c.lastHitAt.set(hitKey, now);
       const dmg = clamp(Math.round(num(msg.dmg, 1)), 1, 4);
       b.hp = Math.max(0, b.hp - dmg);
       if (b.state === 'idle' && b.hp > 0) b.state = 'chase'; // 眠っていても攻撃されれば起きる
-      this.out.broadcast({ t: 'bhit', hp: b.hp, maxHp: b.maxHp, dmg, by: c.id, dx: r2(dx / (d || 1)), dz: r2(dz / (d || 1)) });
+      this.out.broadcast({ t: 'bhit', id: b.id, hp: b.hp, maxHp: b.maxHp, dmg, by: c.id, dx: r2(dx / (d || 1)), dz: r2(dz / (d || 1)) });
       if (b.hp <= 0) {
-        b.alive = false; b.zones = []; b.atk = null;
-        b.respawnAt = now + BOSS_RESPAWN_MS;
-        this.out.broadcast({ t: 'bdead', by: c.id, x: r2(b.x), z: r2(b.z) });
+        b.alive = false; b.zones = []; b.atk = null; b.dash = null;
+        b.respawnAt = now + def.respawnMs;
+        this.out.broadcast({ t: 'bdead', id: b.id, by: c.id, x: r2(b.x), z: r2(b.z) });
       }
     }
 
-    updateBoss(dt, now) {
-      const b = this.boss;
+    updateBoss(b, dt, now) {
+      const def = BOSS_DEFS[b.type];
       if (!b.alive) {
         if (now >= b.respawnAt) {
-          this.boss = this.newBoss();
-          this.out.broadcast(Object.assign({ t: 'bspawn' }, this.bossInfo()));
+          const fresh = this.newBoss(b.type);
+          this.bosses.set(b.type, fresh);
+          this.out.broadcast(Object.assign({ t: 'bspawn' }, this.bossInfo(fresh)));
         }
         return;
       }
       b.cooldown = Math.max(0, b.cooldown - dt);
 
-      if (b.state === 'slam' || b.state === 'rock') {
+      if (def.attacks[b.state]) {
         b.timer -= dt;
-        if (b.timer <= 0) this.resolveBossAttack();
-        this.pushBossOutOfPlayers();
+        if (b.timer <= 0) this.resolveBossAttack(b);
+        this.pushBossOutOfPlayers(b);
         return;
       }
       if (b.state === 'recover') {
         b.timer -= dt;
         if (b.timer <= 0) b.state = 'chase';
-        this.pushBossOutOfPlayers();
+        this.pushBossOutOfPlayers(b);
         return;
       }
 
-      const targets = this.bossTargets(b.state === 'idle' ? BOSS_AGGRO : BOSS_CHASE_RANGE);
+      const targets = this.bossTargets(b, b.state === 'idle' ? def.aggro : def.chaseRange);
       if (b.state === 'idle') {
         if (targets.length) { b.state = 'chase'; b.lostTarget = 0; }
-        else { this.bossWalk(b.homeX, b.homeZ, BOSS_SPEED * 1.5, dt); b.hp = Math.min(b.maxHp, b.hp + dt * 6); }
+        else { this.bossWalk(b, b.homeX, b.homeZ, def.speed * 1.5, dt); b.hp = Math.min(b.maxHp, b.hp + dt * 6); }
         return;
       }
       // chase
       if (!targets.length) {
         b.lostTarget += dt;
         if (b.lostTarget > 5) b.state = 'idle';
-        this.bossWalk(b.homeX, b.homeZ, BOSS_SPEED, dt);
+        this.bossWalk(b, b.homeX, b.homeZ, def.speed, dt);
         return;
       }
       b.lostTarget = 0;
       const t = targets[0];
-      if (b.cooldown <= 0) { this.startBossAttack(t.d <= BOSS_SLAM_RANGE ? 'slam' : 'rock', targets); return; }
-      if (t.d > BOSS_RADIUS + BODY_RADIUS.player + 0.8) this.bossWalk(t.c.x, t.c.z, BOSS_SPEED * (this.bossPhase() ? 1.35 : 1), dt);
-      else this.bossTurn(t.c.x, t.c.z, dt);
-      this.pushBossOutOfPlayers();
+      if (b.cooldown <= 0) { this.startBossAttack(b, t.d <= def.closeRange ? def.closeAttack : def.farAttack, targets); return; }
+      if (t.d > def.radius + BODY_RADIUS.player + 0.8) this.bossWalk(b, t.c.x, t.c.z, def.speed * (this.bossPhase(b) ? 1.35 : 1), dt);
+      else this.bossTurn(b, t.c.x, t.c.z, dt);
+      this.pushBossOutOfPlayers(b);
     }
 
-    bossTurn(tx, tz, dt) {
-      const b = this.boss;
+    bossTurn(b, tx, tz, dt) {
       const diff = Math.atan2(Math.sin(Math.atan2(tx - b.x, tz - b.z) - b.ry), Math.cos(Math.atan2(tx - b.x, tz - b.z) - b.ry));
       b.ry += diff * Math.min(1, dt * 4);
     }
 
-    bossWalk(tx, tz, speed, dt) {
-      const b = this.boss;
+    bossWalk(b, tx, tz, speed, dt) {
       const dx = tx - b.x, dz = tz - b.z, d = Math.hypot(dx, dz);
-      this.bossTurn(tx, tz, dt);
+      this.bossTurn(b, tx, tz, dt);
       if (d < 0.3) return;
       const px = b.x, pz = b.z, step = Math.min(d, speed * dt);
       b.x += (dx / d) * step; b.z += (dz / d) * step;
-      this.fenceCollide(b, BOSS_RADIUS * 0.7);
+      this.fenceCollide(b, BOSS_DEFS[b.type].radius * 0.7);
       if (islandHeight(b.x, b.z) < 0.8 || isInsideCaveArea(b.x, b.z, 2)) { b.x = px; b.z = pz; }
-      this.pushBossOutOfPlayers();
+      this.pushBossOutOfPlayers(b);
     }
 
-    pushBossOutOfPlayers() {
-      const b = this.boss, r = BOSS_RADIUS + BODY_RADIUS.player;
+    pushBossOutOfPlayers(b) {
+      const r = BOSS_DEFS[b.type].radius + BODY_RADIUS.player;
       for (const c of this.clients.values()) {
         if (!c.joined || c.dead || c.cave >= 0) continue;
         const p = bodyPush(b.x, b.z, c.x, c.z, r);
@@ -2996,18 +3055,37 @@
       }
     }
 
-    // 予告(赤い範囲)を出して攻撃の溜めに入る。当たり判定は溜め終わりの瞬間に、その時の位置で行う
-    startBossAttack(kind, targets) {
-      const b = this.boss, spec = BOSS_ATTACKS[kind], ph = this.bossPhase();
-      b.state = kind; b.timer = spec.dur[ph];
-      b.zones = kind === 'slam'
-        ? [[b.x, b.z, spec.r[ph]]]
-        : targets.slice(0, spec.maxZones[ph]).map(t => [t.c.x, t.c.z, spec.r[ph]]);
-      this.out.broadcast({ t: 'batk', kind, dur: spec.dur[ph], zones: b.zones.map(z => [r2(z[0]), r2(z[1]), z[2]]) });
+    // 突進の通り道: 向いた方向へ円を並べた予告にする(当たり判定も同じ円)。海・洞窟の手前で切れる。終点はボスが着地する場所
+    planBossLane(b, target, spec, ph) {
+      const def = BOSS_DEFS[b.type], r = spec.r[ph], len = spec.len[ph];
+      const ry = Math.atan2(target.x - b.x, target.z - b.z), ux = Math.sin(ry), uz = Math.cos(ry);
+      const zones = [];
+      for (let s = def.radius + r * 0.5; s <= len; s += r * 1.2) {
+        const x = b.x + ux * s, z = b.z + uz * s;
+        if (islandHeight(x, z) < 0.8 || isInsideCaveArea(x, z, 2)) break;
+        zones.push([x, z, r]);
+      }
+      return { ry, zones };
     }
 
-    resolveBossAttack() {
-      const b = this.boss, kind = b.state, spec = BOSS_ATTACKS[kind], ph = this.bossPhase();
+    // 予告(赤い範囲)を出して攻撃の溜めに入る。当たり判定は溜め終わりの瞬間に、その時の位置で行う
+    startBossAttack(b, kind, targets) {
+      const def = BOSS_DEFS[b.type], spec = def.attacks[kind], ph = this.bossPhase(b);
+      let zones;
+      if (spec.shape === 'self') zones = [[b.x, b.z, spec.r[ph]]];
+      else if (spec.shape === 'targets') zones = targets.slice(0, spec.maxZones[ph]).map(t => [t.c.x, t.c.z, spec.r[ph]]);
+      else { // lane: 溜めの間は向きを固定する。通り道が取れなければ近距離の攻撃に切り替える
+        const lane = this.planBossLane(b, targets[0].c, spec, ph);
+        if (!lane.zones.length) { this.startBossAttack(b, def.closeAttack, targets); return; }
+        b.ry = lane.ry; b.dash = lane.zones[lane.zones.length - 1];
+        zones = lane.zones;
+      }
+      b.state = kind; b.timer = spec.dur[ph]; b.zones = zones;
+      this.out.broadcast({ t: 'batk', id: b.id, kind, dur: spec.dur[ph], zones: b.zones.map(z => [r2(z[0]), r2(z[1]), z[2]]) });
+    }
+
+    resolveBossAttack(b) {
+      const def = BOSS_DEFS[b.type], kind = b.state, spec = def.attacks[kind], ph = this.bossPhase(b);
       for (const c of this.clients.values()) {
         if (!c.joined || c.dead || c.cave >= 0) continue;
         for (const [zx, zz, zr] of b.zones) {
@@ -3017,10 +3095,15 @@
           break;
         }
       }
-      this.out.broadcast({ t: 'bimpact', kind, zones: b.zones.map(z => [r2(z[0]), r2(z[1]), z[2]]) });
+      this.out.broadcast({ t: 'bimpact', id: b.id, kind, zones: b.zones.map(z => [r2(z[0]), r2(z[1]), z[2]]) });
+      if (b.dash) { // 突進は通り道の終点へ着地する
+        b.x = b.dash[0]; b.z = b.dash[1]; b.dash = null;
+        this.fenceCollide(b, def.radius * 0.7);
+        this.pushBossOutOfPlayers(b);
+      }
       b.zones = [];
-      b.state = 'recover'; b.timer = ph ? 0.7 : 1.0;
-      b.cooldown = ph ? 1.2 : 2.0;
+      b.state = 'recover'; b.timer = def.recover[ph];
+      b.cooldown = def.cooldown[ph];
     }
 
     restoreWorld(saved) {
@@ -3061,7 +3144,7 @@
       this.underwaterLayout = candidate.underwaterLayout;
       this.underwaterResources = candidate.underwaterResources;
       this.enemies = candidate.enemies;
-      this.boss = candidate.boss;
+      this.bosses = candidate.bosses;
       this.taken.clear(); // 採集物の再出現待ちは永続化データに含めない
       const world = this.serialize();
       this.out.broadcast({ t:'worldRestored', world, seedChanged });
@@ -3085,6 +3168,6 @@
     MAX_OUTDOOR_COLLECTIBLE_KEYS, MAX_CAVE_ORE_KEYS, MAX_CAVE_ITEM_KEYS, MAX_UNDERWATER_RESOURCES, UNDERWATER_INTERACT_RADIUS,
     CAVE_MOUTH_OFFSET, CAVE_EXIT_RECESS, CAVE_EXIT_OFFSET,
     CAVE_ROOM_RADIUS, CAVE_INTERIOR_ENTRY, CAVE_INTERIOR_EXIT, ROGUE_DUNGEON_INDEX, ROGUE_LINEAR_DUNGEON_INDEX, ROGUE_WALK_AREAS, ROGUE_GATE_Z, ROGUE_LINEAR_WALK_AREAS, ROGUE_LINEAR_GATE_Z, isRogueDungeonIndex, getRogueDungeonVariant, getRogueDungeonDefinition, isRogueDungeonWalkable, getRogueDungeonFloorCandidates, rogueFloorHoleContainsPoint, findRogueDungeonPath, getRogueDungeonLayout, resolveRogueDungeonSpawn, getRogueChestReward, ROGUE_ENEMY_PROFILES, getRogueEnemyProfile,
-    getBossHome, BOSS_MAX_HP, BOSS_RADIUS, BOSS_RESPAWN_MS, BOSS_HIT_RANGE, BOSS_ATTACKS, BOSS_STATE_CODE,
+    getBossHome, BOSS_DEFS, BOSS_TYPES, BOSS_STATE_CODE,
   };
 });

@@ -12,5 +12,5 @@ check('タイトル画面にキー操作一覧を表示しない', !!start && !/
 check('ゲーム画面に常時表示の左下操作ヒントを配置しない', !/id="help"/.test(html) && !/#help\s*\{/.test(html));
 check('操作ヒント更新用の定期タイマーを除去', !/function updateHelp\s*\(/.test(html) && !/setInterval\(updateHelp/.test(html));
 check('削除済み操作ヒント関数を起動時に呼び出さない', !/\bupdateHelp\s*\(/.test(html));
-check('ゲーム内バージョン表示はv70.7', /<div id="versionLabel"[^>]*>v70\.7<\/div>/.test(html));
+check('ゲーム内バージョン表示はv70.8', /<div id="versionLabel"[^>]*>v70\.8<\/div>/.test(html));
 if (!process.exitCode) console.log('UI title and controls checks passed.');

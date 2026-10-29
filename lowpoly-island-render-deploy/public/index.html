@@ -567,7 +567,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v70.7</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v70.8</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -6118,18 +6118,15 @@ window.startGame = function(NETINIT){
     }
   }
 
-  // ============ ボス: 遺跡の石の守護者 ============
+  // ============ ボス(島のボス: 遺跡の石の守護者・荒ぶる大熊) ============
   // 体力・位置・攻撃のタイミングはサーバー(shared.js の WorldSim)が決める。
   // ここでは見た目・攻撃の予告(赤い範囲)・HPバー・演出だけを担当する。前方は +z。
-  const BOSS_NAME = '遺跡の石の守護者';
+  // 種類ごとの違いは、名前・大きさを持つ Shared.BOSS_DEFS と、モデル・演出・報酬を持つ下の BOSS_LOOKS の2つの表だけ。
+  const BOSS_DEFS = Shared.BOSS_DEFS;
   const BOSS_REWARD_RADIUS = 45; // 倒したとき、この距離内にいる生存者が報酬をもらう
 
-  // 守護者のモデル共通の材質と部品(箱・岩)。モデルを増やしても同じ質感になる
-  function guardianKit(){
-    const stone = new THREE.MeshStandardMaterial({ color:0x8a8576, flatShading:true, roughness:1 });
-    const dark  = new THREE.MeshStandardMaterial({ color:0x55524a, flatShading:true, roughness:1 });
-    const moss  = new THREE.MeshStandardMaterial({ color:0x5f7d44, flatShading:true, roughness:1 });
-    const glow  = new THREE.MeshStandardMaterial({ color:0x9ff4ff, emissive:0x35c8ff, emissiveIntensity:1.1, flatShading:true });
+  // ボスのモデル共通の部品(箱・岩・トゲ)。質感(materials)を渡すと、同じ作りで質感の違うボスが作れる
+  function bossKit(mats){
     const block = (w,h,d, m, x,y,z, jitter) => {
       const mesh = new THREE.Mesh(roughen(new THREE.BoxGeometry(w,h,d), jitter === undefined ? 0.14 : jitter), m);
       mesh.position.set(x,y,z); mesh.castShadow = true; return mesh;
@@ -6142,7 +6139,26 @@ window.startGame = function(NETINIT){
       const mesh = new THREE.Mesh(roughen(new THREE.ConeGeometry(r,h,5), r*0.2), m);
       mesh.position.set(x,y,z); mesh.rotation.set(rx||0, 0, rz||0); mesh.castShadow = true; return mesh;
     };
-    return { stone, dark, moss, glow, block, boulder, spike };
+    return Object.assign({ block, boulder, spike }, mats);
+  }
+  // 守護者の材質と部品。モデルを増やしても同じ質感になる
+  function guardianKit(){
+    return bossKit({
+      stone: new THREE.MeshStandardMaterial({ color:0x8a8576, flatShading:true, roughness:1 }),
+      dark:  new THREE.MeshStandardMaterial({ color:0x55524a, flatShading:true, roughness:1 }),
+      moss:  new THREE.MeshStandardMaterial({ color:0x5f7d44, flatShading:true, roughness:1 }),
+      glow:  new THREE.MeshStandardMaterial({ color:0x9ff4ff, emissive:0x35c8ff, emissiveIntensity:1.1, flatShading:true }),
+    });
+  }
+  // 大熊の材質と部品(茶色の毛・淡い腹・象牙色の爪・橙色に光る目)
+  function bearKit(){
+    return bossKit({
+      fur:     new THREE.MeshStandardMaterial({ color:0x7a5232, flatShading:true, roughness:1 }),
+      furDark: new THREE.MeshStandardMaterial({ color:0x4a301c, flatShading:true, roughness:1 }),
+      belly:   new THREE.MeshStandardMaterial({ color:0xa88455, flatShading:true, roughness:1 }),
+      claw:    new THREE.MeshStandardMaterial({ color:0xe9dfc6, flatShading:true, roughness:0.9 }),
+      glow:    new THREE.MeshStandardMaterial({ color:0xffc27a, emissive:0xff6a1a, emissiveIntensity:1.1, flatShading:true }),
+    });
   }
 
   // 守護者のモデルは、どれも同じ約束で作る(updateBoss がこの parts を動かす):
@@ -6249,34 +6265,108 @@ window.startGame = function(NETINIT){
     return g;
   }
 
-  // どの守護者を出すか(ここを変えるだけで見た目が切り替わる)
+  // 荒ぶる大熊: 立ち上がった巨大なクマ。前かがみで長い腕を垂らし、橙色の目と胸の傷だけが光る
+  //   守護者と同じ約束(userData.parts)で作るので、歩行・攻撃の構え・被弾の光は updateBossOne がそのまま動かす。
+  //   userData.stance = { hip: 腰の高さ, lean: 立っているときの前傾(ラジアン) }(守護者は省略=腰1.7m・前傾なし)
+  function makeBear(){
+    const g = new THREE.Group();
+    const { fur, furDark, belly, claw, glow, block, boulder, spike } = bearKit();
+    const HIP = 1.5;
+
+    // 脚: 短く太い。足の裏は大きく、爪が前へ出る
+    const legs = [-1,1].map(sx => {
+      const p = new THREE.Group(); p.position.set(sx*0.95, HIP, 0);
+      p.add(block(1.2,1.4,1.4, fur, 0,-0.7,0));
+      p.add(block(1.3,0.35,1.9, furDark, 0,-1.35,0.3));
+      for (const cx of [-0.4,0,0.4]) p.add(block(0.18,0.14,0.45, claw, cx,-1.36,1.3, 0.02));
+      g.add(p); return p;
+    });
+
+    // 胴体(腰を原点。前かがみ・のけぞり・身を低くする動きはこのグループを回す)
+    const torso = new THREE.Group(); torso.position.y = HIP; g.add(torso);
+    torso.add(block(2.2,0.9,1.8, furDark, 0,0.3,0));
+    torso.add(block(3.0,2.3,2.3, fur, 0,1.8,0));
+    torso.add(block(1.8,1.7,0.3, belly, 0,1.55,1.1, 0.08));
+    const core = block(0.55,0.14,0.06, glow, 0.5,2.0,1.28, 0); torso.add(core);       // 胸の古傷(橙に光る)
+    torso.add(block(0.4,0.1,0.06, glow, 0.62,1.78,1.28, 0));
+    torso.add(boulder(1.2, fur, 0,3.0,-0.55));                                         // 肩の盛り上がり
+    [[2.9,-1.2,0.5,-0.7,0],[2.6,-1.25,0.4,-0.8,-0.7],[2.6,-1.25,0.4,-0.8,0.7],[2.0,-1.3,0.35,-0.6,-0.5],[2.0,-1.3,0.35,-0.6,0.5]]
+      .forEach(([y,z,r,rx,x]) => torso.add(spike(r,r*2.2,furDark,x*0.9,y,z,rx,0)));     // 背中の逆立った毛
+
+    // 頭: 大きな頭骨・鼻先・丸い耳・牙。目は橙に光る
+    const head = new THREE.Group(); head.position.set(0,3.55,0.7); torso.add(head);
+    head.add(block(1.7,1.4,1.6, fur, 0,0,0));
+    head.add(block(0.95,0.7,0.95, belly, 0,-0.3,1.0));
+    head.add(block(0.32,0.22,0.2, furDark, 0,-0.05,1.5, 0.03));
+    head.add(block(1.6,0.2,0.3, furDark, 0,0.42,0.78, 0.05));
+    for (const sx of [-1,1]){
+      head.add(boulder(0.4, fur, sx*0.75,0.82,-0.1));
+      head.add(boulder(0.2, furDark, sx*0.75,0.82,0.1));
+      head.add(spike(0.09,0.4,claw, sx*0.3,-0.68,1.28, Math.PI,0));
+    }
+    const eyes = [-1,1].map(sx => { const e = block(0.24,0.14,0.08, glow, sx*0.45,0.2,0.82, 0); head.add(e); return e; });
+
+    // 腕(肩を原点に下へ伸ばす。拳は大きな掌に3本の爪)
+    const arms = [-1,1].map(sx => {
+      const p = new THREE.Group(); p.position.set(sx*2.05, 2.5, 0.1);
+      p.add(boulder(0.9, fur, 0,0.1,0));
+      p.add(block(1.0,2.0,1.1, fur, 0,-1.0,0));
+      p.add(block(1.3,1.1,1.4, furDark, 0,-2.45,0.1));
+      for (const cx of [-0.38,0,0.38]) p.add(spike(0.11,0.75,claw, cx,-3.1,0.7, Math.PI*0.88,0));
+      p.rotation.z = sx*0.1;
+      torso.add(p); return p;
+    });
+
+    g.userData.parts = { torso, head, legs, arms, core, eyes, glow, bodyMats:[fur, furDark, belly] };
+    g.userData.stance = { hip: HIP, lean: 0.3 };
+    return g;
+  }
+
+  // どの守護者の見た目を出すか(ここを変えるだけで見た目が切り替わる)
   const GUARDIAN_MODELS = { stone: makeGuardian, brute: makeGuardianBrute };
   const GUARDIAN_MODEL = 'stone';
 
-  let boss = null; // { mesh, parts, hp, maxHp, state, tx,tz,tr, ... } サーバーが送ってくる1体だけ
+  // ボスの種類ごとの見た目・演出・報酬。キーは Shared.BOSS_DEFS と同じ
+  const BOSS_LOOKS = {
+    guardian: { model: () => GUARDIAN_MODELS[GUARDIAN_MODEL](), returnText: '遺跡に戻ってきた', reward: { relic: 5, itemId: 'item_ancient_gold' },
+                bar: 'linear-gradient(90deg,#8fe9ff,#35a8d8)' },
+    bear:     { model: makeBear, returnText: '縄張りに戻ってきた', reward: { relic: 5, itemId: 'item_ancient_gold' },
+                bar: 'linear-gradient(90deg,#ffb35a,#d8561f)' },
+  };
+  // 攻撃の溜めの構え(予告の進み p=0→1 に合わせて動く): raise=腕を振り上げる量 crouch=身を低くして前へ構える量 shake=震え
+  const BOSS_POSES = { slam: { raise: 0.95 }, rock: { raise: 0.6, shake: true }, charge: { raise: 0.2, crouch: 1 } };
+  const BOSS_IMPACT_LEAN = { slam: 0.45, charge: 0.3 }; // 着弾の瞬間に前へ倒れ込む量
+
+  const bosses = new Map(); // id -> { mesh, parts, def, look, hp, maxHp, state, tx,tz,tr, ... } サーバーが送ってくるボス(種類ごとに1体)
 
   const bossBarEl = document.getElementById('bossBar');
   const bossBarFillEl = document.getElementById('bossBarFill');
-  document.getElementById('bossBarName').textContent = BOSS_NAME;
-  let bossBarShown = false;
+  const bossBarNameEl = document.getElementById('bossBarName');
+  let bossBarShown = false, bossBarId = '';
 
   function addBoss(info){
-    removeBoss();
-    const mesh = GUARDIAN_MODELS[GUARDIAN_MODEL]();
+    removeBoss(info.id);
+    const look = BOSS_LOOKS[info.id];
+    if (!look) return;
+    const mesh = look.model();
     mesh.position.set(info.x, getHeightAt(info.x, info.z), info.z);
     mesh.rotation.y = info.ry || 0;
     scene.add(mesh);
-    boss = {
-      mesh, parts: mesh.userData.parts, hp: info.hp, maxHp: info.maxHp, state: info.state || 0,
-      tx: info.x, tz: info.z, tr: info.ry || 0, flash: 0, raise: 0, lean: 0, walk: 0, atk: null, marks: [],
-    };
+    bosses.set(info.id, {
+      id: info.id, def: BOSS_DEFS[info.id], look, mesh, parts: mesh.userData.parts,
+      stance: Object.assign({ hip: 1.7, lean: 0 }, mesh.userData.stance),
+      hp: info.hp, maxHp: info.maxHp, state: info.state || 0,
+      tx: info.x, tz: info.z, tr: info.ry || 0, flash: 0, raise: 0, crouch: 0, lean: 0, walk: 0, rush: 0, atk: null, marks: [],
+    });
   }
-  function removeBoss(){
+  function removeBoss(id){
+    const boss = bosses.get(id);
     if (!boss) return;
-    clearBossMarks();
+    clearBossMarks(boss);
     scene.remove(boss.mesh);
-    boss = null;
+    bosses.delete(id);
   }
+  function removeAllBosses(){ for (const id of [...bosses.keys()]) removeBoss(id); }
 
   // ---- 攻撃の予告: 地面の赤い範囲(落石は頭上の岩が落ちてくる) ----
   function groundTop(x, z, r){ // 範囲の中で一番高い地面(斜面で赤い円が埋まらないように)
@@ -6305,8 +6395,7 @@ window.startGame = function(NETINIT){
     }
     return mark;
   }
-  function clearBossMarks(){
-    if (!boss) return;
+  function clearBossMarks(boss){
     for (const mk of boss.marks){
       scene.remove(mk.g);
       mk.fill.geometry.dispose(); mk.fill.material.dispose(); mk.edge.geometry.dispose(); mk.edge.material.dispose();
@@ -6314,7 +6403,7 @@ window.startGame = function(NETINIT){
     }
     boss.marks = []; boss.atk = null;
   }
-  function updateBossMarks(p){ // p: 予告の進み具合 0→1
+  function updateBossMarks(boss, p){ // p: 予告の進み具合 0→1
     for (const mk of boss.marks){
       mk.fill.material.opacity = 0.16 + 0.34*p;
       mk.edge.material.opacity = 0.55 + 0.45*Math.abs(Math.sin(p*14));
@@ -6343,21 +6432,29 @@ window.startGame = function(NETINIT){
     })();
   }
 
-  // ---- サーバーからの通知 ----
+  // ---- サーバーからの通知(どれも m.id でボスを指す) ----
   function nearPlayer(x, z, dist){ return Math.hypot(x - player.position.x, z - player.position.z) < dist; }
 
+  function onBossSpawn(m){ // bspawn: 復活
+    addBoss(m);
+    const look = BOSS_LOOKS[m.id];
+    if (look) showToast(BOSS_DEFS[m.id].name + 'が' + look.returnText, 'ボス');
+  }
   function onBossAttack(m){ // batk: 予告開始
+    const boss = bosses.get(m.id);
     if (!boss) return;
-    clearBossMarks();
+    clearBossMarks(boss);
     boss.atk = { kind: m.kind, t: 0, dur: m.dur };
     boss.marks = m.zones.map(z => makeBossMark(z, m.kind));
     if (inCaveIndex === -1 && nearPlayer(boss.mesh.position.x, boss.mesh.position.z, 40)) sfx.bossWarn();
   }
   function onBossImpact(m){ // bimpact: 攻撃が当たる瞬間
+    const boss = bosses.get(m.id);
     if (!boss) return;
-    clearBossMarks();
-    boss.raise = 0;
-    if (m.kind === 'slam') boss.lean = 0.45;
+    clearBossMarks(boss);
+    boss.raise = 0; boss.crouch = 0;
+    if (BOSS_IMPACT_LEAN[m.kind]) boss.lean = BOSS_IMPACT_LEAN[m.kind];
+    if (m.kind === 'charge') boss.rush = 0.6; // 突進は着地点へ素早く滑り込む
     if (inCaveIndex !== -1) return;
     let near = false;
     for (const [x, z, r] of m.zones){
@@ -6373,6 +6470,7 @@ window.startGame = function(NETINIT){
     if (near){ camShake = Math.max(camShake, m.kind === 'slam' ? 0.45 : 0.3); sfx.bossSlam(); }
   }
   function onBossHit(m){
+    const boss = bosses.get(m.id);
     if (!boss) return;
     boss.hp = m.hp; boss.maxHp = m.maxHp; boss.flash = 0.15;
     if (inCaveIndex !== -1) return;
@@ -6387,6 +6485,9 @@ window.startGame = function(NETINIT){
     if (nearPlayer(p.x, p.z, 40)) sfx.hit(true);
   }
   function onBossDead(m){
+    const boss = bosses.get(m.id), look = BOSS_LOOKS[m.id];
+    if (!look) return;
+    const name = BOSS_DEFS[m.id].name;
     const near = nearPlayer(m.x, m.z, BOSS_REWARD_RADIUS);
     if (boss && inCaveIndex === -1){
       const p = boss.mesh.position, y = p.y;
@@ -6397,23 +6498,23 @@ window.startGame = function(NETINIT){
       spawnShockwave(p.x, y, p.z, 7);
       if (near){ camShake = Math.max(camShake, 0.5); sfx.bossDefeat(); }
     }
-    removeBoss();
+    removeBoss(m.id);
     if (near && !playerDead && inCaveIndex === -1){ // 倒した本人だけでなく、近くで戦った生存者全員に報酬
-      inv.relic += 5;
+      inv.relic += look.reward.relic;
       refreshInvHud();
-      showToast('古代の欠片 ×5', BOSS_NAME + 'を倒した');
-      collectItem(ITEM_DEFS_BY_ID['item_ancient_gold']);
+      showToast('古代の欠片 ×' + look.reward.relic, name + 'を倒した');
+      collectItem(ITEM_DEFS_BY_ID[look.reward.itemId]);
     } else if (m.by !== NET_ID) {
-      showToast(BOSS_NAME + 'が倒された', 'ボス');
+      showToast(name + 'が倒された', 'ボス');
     }
   }
 
   // ---- 毎フレーム: 位置合わせ・アニメーション・HPバー ----
-  function updateBoss(dt){
-    if (!boss){ setBossBar(false); return; }
+  function updateBossOne(boss, dt){
     const m = boss.mesh, P = boss.parts, t = performance.now()/1000;
     const px = m.position.x, pz = m.position.z;
-    const k = Math.min(1, dt*8);
+    const k = Math.min(1, dt*(boss.rush > 0 ? 20 : 8));
+    boss.rush = Math.max(0, boss.rush - dt);
     m.position.x += (boss.tx - m.position.x) * k;
     m.position.z += (boss.tz - m.position.z) * k;
     m.position.y = getHeightAt(m.position.x, m.position.z);
@@ -6427,37 +6528,54 @@ window.startGame = function(NETINIT){
     const sw = Math.sin(boss.walk) * 0.5 * walking;
     P.legs[0].rotation.x = sw; P.legs[1].rotation.x = -sw;
 
-    // 攻撃の溜め: 予告の進みに合わせて腕を振り上げる
-    let target = 0;
+    // 攻撃の溜め: 予告の進みに合わせて構える(腕を振り上げる・身を低くする)
+    let target = 0, crouchTarget = 0;
+    const pose = boss.atk ? (BOSS_POSES[boss.atk.kind] || BOSS_POSES.rock) : null;
     if (boss.atk){
       boss.atk.t += dt;
       const p = Math.min(1, boss.atk.t / boss.atk.dur);
-      updateBossMarks(p);
-      target = boss.atk.kind === 'slam' ? 0.95*p : 0.6*p;
-      if (boss.atk.t > boss.atk.dur + 1) clearBossMarks(); // 着弾の通知が届かなかったときの後始末
+      updateBossMarks(boss, p);
+      target = pose.raise * p; crouchTarget = (pose.crouch || 0) * p;
+      if (boss.atk.t > boss.atk.dur + 1) clearBossMarks(boss); // 着弾の通知が届かなかったときの後始末
     }
     boss.raise += (target - boss.raise) * Math.min(1, dt*(target < boss.raise ? 16 : 7));
+    boss.crouch += (crouchTarget - boss.crouch) * Math.min(1, dt*(crouchTarget < boss.crouch ? 16 : 7));
     boss.lean *= Math.max(0, 1 - dt*4);
-    const shake = boss.atk && boss.atk.kind === 'rock' ? Math.sin(t*40)*0.04*boss.raise : 0;
+    const shake = pose && pose.shake ? Math.sin(t*40)*0.04*boss.raise : 0;
     const swing = Math.sin(boss.walk + Math.PI) * 0.35 * walking * (1 - boss.raise);
     P.arms[0].rotation.x = -Math.PI*boss.raise + swing + shake;
     P.arms[1].rotation.x = -Math.PI*boss.raise - swing - shake;
-    P.torso.rotation.x = boss.lean - boss.raise*0.18;
-    P.torso.position.y = 1.7 + Math.sin(t*1.6)*0.04 + Math.abs(Math.sin(boss.walk))*0.12*walking;
+    P.torso.rotation.x = boss.stance.lean + boss.lean - boss.raise*0.18 + boss.crouch*0.35;
+    P.torso.position.y = boss.stance.hip + Math.sin(t*1.6)*0.04 + Math.abs(Math.sin(boss.walk))*0.12*walking - boss.crouch*0.45;
 
     // 光: 戦闘中・攻撃の溜めで強く、ヒット直後は体が赤く光る
     const awake = boss.state !== 0;
-    P.glow.emissiveIntensity = (awake ? 1.5 : 0.8) + Math.sin(t*3)*0.25 + boss.raise*1.2;
+    P.glow.emissiveIntensity = (awake ? 1.5 : 0.8) + Math.sin(t*3)*0.25 + boss.raise*1.2 + boss.crouch*0.8;
     if (boss.flash > 0) boss.flash -= dt;
     const f = Math.max(0, boss.flash) / 0.15;
     for (const mat of P.bodyMats){ mat.emissive.setHex(0xff4a22); mat.emissiveIntensity = f*0.7; }
-
-    // HPバー: 起きている間と、近くにいるときだけ出す
-    const show = inCaveIndex === -1 && boss.hp > 0 && (awake || nearPlayer(m.position.x, m.position.z, 45));
-    setBossBar(show);
-    if (show) bossBarFillEl.style.width = Math.max(0, boss.hp / boss.maxHp * 100) + '%';
   }
-  function setBossBar(show){
+  function updateBoss(dt){
+    let focus = null, focusDist = Infinity;
+    for (const boss of bosses.values()){
+      updateBossOne(boss, dt);
+      if (inCaveIndex !== -1 || boss.hp <= 0) continue;
+      // HPバー: 起きているボスと、近くにいるボスのうち、いちばん近い1体だけ出す
+      const m = boss.mesh.position, d = Math.hypot(m.x - player.position.x, m.z - player.position.z);
+      if ((boss.state !== 0 || d < 45) && d < focusDist){ focus = boss; focusDist = d; }
+    }
+    setBossBar(focus);
+  }
+  function setBossBar(boss){
+    if (boss){
+      if (boss.id !== bossBarId){
+        bossBarId = boss.id;
+        bossBarNameEl.textContent = boss.def.name;
+        bossBarFillEl.style.background = boss.look.bar;
+      }
+      bossBarFillEl.style.width = Math.max(0, boss.hp / boss.maxHp * 100) + '%';
+    }
+    const show = !!boss;
     if (show === bossBarShown) return;
     bossBarShown = show;
     bossBarEl.classList.toggle('show', show);
@@ -6860,13 +6978,13 @@ window.startGame = function(NETINIT){
         hitAny = true;
       }
     }
-    if (boss){ // ボスは体が大きいので、体の表面までの距離で判定する
+    for (const boss of bosses.values()){ // ボスは体が大きいので、体の表面までの距離で判定する
       const dx = boss.mesh.position.x - player.position.x;
       const dz = boss.mesh.position.z - player.position.z;
-      const d = Math.hypot(dx, dz);
+      const d = Math.hypot(dx, dz), br = boss.def.radius;
       const dot = (dx*facing.x + dz*facing.z) / (d || 1);
-      if (d <= range + Shared.BOSS_RADIUS && (dot > 0.1 || d < Shared.BOSS_RADIUS + 1)){
-        Net.send({ t:'hitboss', dmg });
+      if (d <= range + br && (dot > 0.1 || d < br + 1)){
+        Net.send({ t:'hitboss', id:boss.id, dmg });
         hitAny = true;
       }
     }
@@ -8160,9 +8278,9 @@ window.startGame = function(NETINIT){
         if (pos.y - m.y > BODY_STEP_OVER) continue;
         push(Shared.bodyPush(pos.x, pos.z, m.x, m.z, Shared.BODY_RADIUS[en.kind] + Shared.BODY_RADIUS.player), 1);
       }
-      if (boss){
+      for (const boss of bosses.values()){
         const m = boss.mesh.position;
-        push(Shared.bodyPush(pos.x, pos.z, m.x, m.z, Shared.BODY_RADIUS.boss + Shared.BODY_RADIUS.player), 1);
+        push(Shared.bodyPush(pos.x, pos.z, m.x, m.z, boss.def.radius + Shared.BODY_RADIUS.player), 1);
       }
     }
     for (const r of remotes.values()){
@@ -9328,8 +9446,9 @@ window.startGame = function(NETINIT){
       const en = enemyById.get(e[0]);
       if (en){ en.tx = e[1]; en.tz = e[2]; en.tr = e[3]; if (e.length > 4) en.awake = e[4] === 1; if (e.length > 5) en.st = e[5]; }
     }
-    if (m.b && boss){
-      boss.tx = m.b[0]; boss.tz = m.b[1]; boss.tr = m.b[2]; boss.state = m.b[3]; boss.hp = m.b[4];
+    if (m.b) for (const r of m.b){ // [id, x, z, 向き, 状態, 体力]
+      const boss = bosses.get(r[0]);
+      if (boss){ boss.tx = r[1]; boss.tz = r[2]; boss.tr = r[3]; boss.state = r[4]; boss.hp = r[5]; }
     }
     for (const p of m.p){
       if (p[0] === NET_ID) continue;
@@ -9614,7 +9733,7 @@ window.startGame = function(NETINIT){
         case 'edead': onEnemyDead(m); break;
         case 'eatk': { const en = enemyById.get(m.id); if (en) en.atkT = 0.35; break; } // 敵が攻撃した(噛みつきなどの動き用)
         case 'espawn': addEnemy(m); break;
-        case 'bspawn': addBoss(m); showToast(BOSS_NAME + 'が遺跡に戻ってきた', 'ボス'); break;
+        case 'bspawn': onBossSpawn(m); break;
         case 'bhit': onBossHit(m); break;
         case 'bdead': onBossDead(m); break;
         case 'batk': onBossAttack(m); break;
@@ -9708,8 +9827,8 @@ window.startGame = function(NETINIT){
     }
     for (const idx of W.chests) applyChestOpened(idx, false);
     for (const e of W.enemies) addEnemy(e);
-    removeBoss();
-    if (W.boss) addBoss(W.boss);
+    removeAllBosses();
+    for (const b of W.bosses || []) addBoss(b);
     for (const p of W.players) addRemote(p.id, p.name);
     if (bulkRecoverMenu.classList.contains('show') && !bulkRecoverPending) renderBulkRecoverList();
   }
@@ -10169,7 +10288,7 @@ window.startGame = function(NETINIT){
         uwSeaweed:() => makeUnderwaterSeaweed(1, 0), uwCoral:() => makeUnderwaterCoral(1, 0), uwRock:() => makeUnderwaterRock(1, 0),
         chestOpen:() => { const c = makeChest(); c.userData.lidPivot.rotation.x = -CHEST_OPEN_ANGLE; return c; },
         chestSunkenOpen:() => { const c = makeChest(); decorateSunkenChest(c); c.userData.lidPivot.rotation.x = -CHEST_OPEN_ANGLE; return c; },
-        uwShell:() => makeUnderwaterShell(0, false), uwShell1:() => makeUnderwaterShell(1, false), uwPearl:() => makeUnderwaterShell(0, true), uwPebble:() => makeUnderwaterPebble(0) }, get underwaterLayout(){ return Shared.getUnderwaterLayout(NETINIT.welcome.seed); }, get nearest(){ return nearestInteractable; }, get boss(){ return boss; },
+        uwShell:() => makeUnderwaterShell(0, false), uwShell1:() => makeUnderwaterShell(1, false), uwPearl:() => makeUnderwaterShell(0, true), uwPebble:() => makeUnderwaterPebble(0) }, get underwaterLayout(){ return Shared.getUnderwaterLayout(NETINIT.welcome.seed); }, get nearest(){ return nearestInteractable; }, get bosses(){ return bosses; },
       springs: springInfos, setHp(v){ playerHp = v; }, updateSprings, camp: campInfo, applyChestOpened, campGuardsAlive, grotto: grottoInfo, inGrotto,
       setYaw(v){ yaw = v; }, setPitch(v){ pitch = v; }, snapCam(){ camSnap = true; }, camera, get collectedItems(){ return collectedItems; }, selfAvatar, Net,
     };
@@ -10198,7 +10317,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=70.7-shade-shadow-concept"></script>
+<script src="shared.js?v=70.8-bear-boss"></script>
 <script src="boot.js"></script>
 </body>
 </html>

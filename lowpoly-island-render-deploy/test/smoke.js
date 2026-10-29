@@ -149,6 +149,7 @@ async function startServer(port, extraEnv) {
 
   // ================= ボス(遺跡の石の守護者) =================
   {
+    const G = Shared.BOSS_DEFS.guardian;
     const seed = 4242;
     const w = new Shared.WorldSim({ seed });
     const sent = [], bc = [];
@@ -157,7 +158,7 @@ async function startServer(port, extraEnv) {
     const again = Shared.getBossHome(seed);
     check('ボスの持ち場は seed から決まる(サーバー/クライアントで一致)', home.x === again.x && home.z === again.z);
     check('ボスの持ち場は陸地で、洞窟の外観エリアの外', Shared.islandHeight(home.x, home.z) >= 1.1 && !Shared.isInsideCaveArea(home.x, home.z, 0));
-    check('welcome にボス情報が入る', w.welcomeFor(99).boss && w.welcomeFor(99).boss.hp === Shared.BOSS_MAX_HP);
+    check('welcome にボス情報が入る', (w.welcomeFor(99).bosses.find(b => b.id === 'guardian') || {}).hp === G.maxHp);
 
     const join = (id, x, z) => {
       w.addClient(id); w.handle(id, { t: 'join', name: 'p' + id, key: 'k' + id });
@@ -169,16 +170,16 @@ async function startServer(port, extraEnv) {
     // 眠っている: 遠くのプレイヤーには反応しない
     const far = join(1, home.x + 60, home.z);
     run(2);
-    check('遠くにいる間は動かない(idle)', w.boss.state === 'idle' && w.boss.x === home.x);
+    check('遠くにいる間は動かない(idle)', w.bosses.get('guardian').state === 'idle' && w.bosses.get('guardian').x === home.x);
     // 攻撃: 離れていると届かない
     w.handle(1, { t: 'hitboss', dmg: 3 });
-    check('離れすぎた攻撃は無効', w.boss.hp === Shared.BOSS_MAX_HP);
+    check('離れすぎた攻撃は無効', w.bosses.get('guardian').hp === G.maxHp);
 
     // 近づくと起きて、予告つきの攻撃をしてくる
     far.x = home.x + 10; far.z = home.z; far.y = gy(far.x, far.z);
     bc.length = 0; sent.length = 0;
     run(3);
-    check('近づくと目を覚ます', w.boss.state !== 'idle');
+    check('近づくと目を覚ます', w.bosses.get('guardian').state !== 'idle');
     const atk = bc.find(m => m.t === 'batk');
     check('攻撃の前に予告(batk)が届く', !!atk && atk.zones.length >= 1 && atk.dur > 0);
 
@@ -200,12 +201,12 @@ async function startServer(port, extraEnv) {
     check('溜めが終わると着弾(bimpact)が届く', bc2.some(m => m.t === 'bimpact'));
     const hurts = sent2.filter(([, m]) => m.t === 'hurt');
     check('範囲内に残った人だけ被弾する', hurts.some(([id]) => id === 1) && !hurts.some(([id]) => id === 2));
-    check('被弾ダメージは攻撃の仕様どおり', hurts.every(([, m]) => m.amount === Shared.BOSS_ATTACKS.slam.dmg));
+    check('被弾ダメージは攻撃の仕様どおり', hurts.every(([, m]) => m.amount === G.attacks.slam.dmg));
 
     // 洞窟内・死亡中の人は狙われず、被弾もしない
     const cave = mk(3, h2.x + 2, h2.z); cave.cave = 0;
     const dead = mk(4, h2.x + 2, h2.z); dead.dead = true;
-    check('洞窟内・死亡中は狙われない', w2.bossTargets(50).every(t => t.c.id !== 3 && t.c.id !== 4));
+    check('洞窟内・死亡中は狙われない', w2.bossTargets(w2.bosses.get('guardian'), 50).every(t => t.c.id !== 3 && t.c.id !== 4));
 
     // ダメージ・クールダウン・撃破・復活
     const w3 = new Shared.WorldSim({ seed });
@@ -215,20 +216,20 @@ async function startServer(port, extraEnv) {
     w3.addClient(1); w3.handle(1, { t: 'join', name: 'p', key: 'k' });
     const c3 = w3.clients.get(1); c3.x = h3.x + 4; c3.z = h3.z; c3.hasState = true;
     w3.handle(1, { t: 'hitboss', dmg: 3 });
-    check('近ければダメージが入る', w3.boss.hp === Shared.BOSS_MAX_HP - 3 && bc3.some(m => m.t === 'bhit' && m.dmg === 3));
+    check('近ければダメージが入る', w3.bosses.get('guardian').hp === G.maxHp - 3 && bc3.some(m => m.t === 'bhit' && m.dmg === 3));
     w3.handle(1, { t: 'hitboss', dmg: 3 });
-    check('連打はクールダウンで無視される', w3.boss.hp === Shared.BOSS_MAX_HP - 3);
+    check('連打はクールダウンで無視される', w3.bosses.get('guardian').hp === G.maxHp - 3);
     c3.lastHitAt.clear(); w3.handle(1, { t: 'hitboss', dmg: 999 });
-    check('ダメージは 1〜4 に丸められる', w3.boss.hp === Shared.BOSS_MAX_HP - 7);
-    check('攻撃されると起きる', w3.boss.state !== 'idle');
-    w3.boss.hp = 1; c3.lastHitAt.clear(); w3.handle(1, { t: 'hitboss', dmg: 1 });
-    check('体力が尽きると撃破(bdead)', !w3.boss.alive && bc3.some(m => m.t === 'bdead' && m.by === 1));
-    check('撃破後はスナップショットにボスが含まれない', (bc3.length = 0, w3.broadcastSnap(), !bc3.find(m => m.t === 'snap').b));
-    check('撃破後は welcome にボスが入らない', w3.welcomeFor(5).boss === null);
+    check('ダメージは 1〜4 に丸められる', w3.bosses.get('guardian').hp === G.maxHp - 7);
+    check('攻撃されると起きる', w3.bosses.get('guardian').state !== 'idle');
+    w3.bosses.get('guardian').hp = 1; c3.lastHitAt.clear(); w3.handle(1, { t: 'hitboss', dmg: 1 });
+    check('体力が尽きると撃破(bdead)', !w3.bosses.get('guardian').alive && bc3.some(m => m.t === 'bdead' && m.by === 1));
+    check('撃破後はスナップショットにボスが含まれない', (bc3.length = 0, w3.broadcastSnap(), !(bc3.find(m => m.t === 'snap').b || []).some(r => r[0] === 'guardian')));
+    check('撃破後は welcome にボスが入らない', !w3.welcomeFor(5).bosses.some(b => b.id === 'guardian'));
     w3.tick(0.05);
-    check('復活時間より前は復活しない', !w3.boss.alive);
-    w3.boss.respawnAt = 0; bc3.length = 0; w3.tick(0.05);
-    check('時間が来ると復活(bspawn)して体力が全快', w3.boss.alive && w3.boss.hp === Shared.BOSS_MAX_HP && bc3.some(m => m.t === 'bspawn'));
+    check('復活時間より前は復活しない', !w3.bosses.get('guardian').alive);
+    w3.bosses.get('guardian').respawnAt = 0; bc3.length = 0; w3.tick(0.05);
+    check('時間が来ると復活(bspawn)して体力が全快', w3.bosses.get('guardian').alive && w3.bosses.get('guardian').hp === G.maxHp && bc3.some(m => m.t === 'bspawn'));
 
     // 逃げ切られたら持ち場へ戻って全回復
     const w4 = new Shared.WorldSim({ seed });
@@ -239,7 +240,7 @@ async function startServer(port, extraEnv) {
     w4.handle(1, { t: 'hitboss', dmg: 4 });
     c4.x = h4.x + 200; // 遠くへ逃げる
     for (let i = 0; i < 20 * 60; i++) w4.tick(0.05);
-    check('相手を見失うと持ち場に戻って体力が全快する', w4.boss.state === 'idle' && Math.hypot(w4.boss.x - h4.x, w4.boss.z - h4.z) < 1 && w4.boss.hp === Shared.BOSS_MAX_HP);
+    check('相手を見失うと持ち場に戻って体力が全快する', w4.bosses.get('guardian').state === 'idle' && Math.hypot(w4.bosses.get('guardian').x - h4.x, w4.bosses.get('guardian').z - h4.z) < 1 && w4.bosses.get('guardian').hp === G.maxHp);
 
     // スナップショット
     const w5 = new Shared.WorldSim({ seed }); const bc5 = [];
@@ -247,7 +248,7 @@ async function startServer(port, extraEnv) {
     w5.addClient(1); w5.handle(1, { t: 'join', name: 'p', key: 'k' });
     w5.broadcastSnap();
     const sn = bc5.find(m => m.t === 'snap');
-    check('スナップショットにボスの位置・状態・体力が入る', sn && Array.isArray(sn.b) && sn.b.length === 5 && sn.b[4] === Shared.BOSS_MAX_HP);
+    check('スナップショットにボスの位置・状態・体力が入る', sn && Array.isArray(sn.b) && (sn.b.find(r => r[0] === 'guardian') || []).length === 6 && sn.b.find(r => r[0] === 'guardian')[5] === G.maxHp);
   }
 
   // ================= 実サーバー(既定: 他人の建築物は回収できない) =================
