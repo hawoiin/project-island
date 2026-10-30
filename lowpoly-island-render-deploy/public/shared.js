@@ -196,8 +196,8 @@
     {type:'segment', ax:0, az:-49, bx:0, bz:-63, width:10, yA:0, yB:0},
     {type:'ellipse', x:0, z:-83, rx:36, rz:25, floorY:0, floorHoles:[
       {type:'ellipse',x:0,z:-83,rx:35.5,rz:4.55},
-      {type:'corridor',ax:15,az:-90,bx:30,bz:-95,width:9.2,extendStart:.6,extendEnd:5.2},
-      {type:'corridor',ax:0,az:-103,bx:0,bz:-121,width:10.8,extendStart:.5,extendEnd:6.8}
+      {type:'corridor',ax:15,az:-90,bx:30,bz:-95,width:9.2,extendStart:0,extendEnd:5.2},
+      {type:'corridor',ax:0,az:-103,bx:0,bz:-121,width:10.8,extendStart:0,extendEnd:6.8}
     ]},
     {type:'segment', ax:-14, az:-78, bx:-29, bz:-69, width:8.5, yA:0, yB:3.8},
     {type:'ellipse', x:-42, z:-66, rx:15, rz:13, floorY:3.8},
@@ -205,7 +205,7 @@
     {type:'ellipse', x:44, z:-97, rx:16, rz:14, floorY:-2.6},
     {type:'segment', ax:0, az:-103, bx:0, bz:-121, width:10, yA:0, yB:-1.4},
     {type:'ellipse', x:0, z:-137, rx:27, rz:18, floorY:-1.4, floorHoles:[
-      {type:'corridor',ax:0,az:-152,bx:0,bz:-166,width:10.8,extendStart:.5,extendEnd:4.0}
+      {type:'corridor',ax:0,az:-152,bx:0,bz:-166,width:10.8,extendStart:0,extendEnd:4.0}
     ]},
     {type:'segment', ax:0, az:-152, bx:0, bz:-166, width:10, yA:-1.4, yB:-5.2},
     {type:'ellipse', x:0, z:-184, rx:35, rz:24, floorY:-5.2},

@@ -34,10 +34,22 @@ check('カメラ床判定は傾斜路の高さを使う',Math.abs(g.rogueCameraF
 check('岩の見た目サイズを含めると通路上の岩を検出できる',g.rogueRockOverlapsPassage(0,-32,2,2,.55)===true);
 check('通路から十分離れた岩は岩縁装飾として残せる',g.rogueRockOverlapsPassage(48,-180,2,2,.55)===false);
 const clippedSlots=[
-  {p:g.rogueCorridorFloorSlot(15,-90,30,-95,9.2,.6,5.2,{cx:0,cz:-83,rx:36,rz:25}),cx:0,cz:-83,rx:36,rz:25},
-  {p:g.rogueCorridorFloorSlot(0,-103,0,-121,10.8,.5,6.8,{cx:0,cz:-83,rx:36,rz:25}),cx:0,cz:-83,rx:36,rz:25},
-  {p:g.rogueCorridorFloorSlot(0,-152,0,-166,10.8,.5,4.0,{cx:0,cz:-137,rx:27,rz:18}),cx:0,cz:-137,rx:27,rz:18}
+  {p:g.rogueCorridorFloorSlot(15,-90,30,-95,9.2,0,5.2,{cx:0,cz:-83,rx:36,rz:25}),cx:0,cz:-83,rx:36,rz:25},
+  {p:g.rogueCorridorFloorSlot(0,-103,0,-121,10.8,0,6.8,{cx:0,cz:-83,rx:36,rz:25}),cx:0,cz:-83,rx:36,rz:25},
+  {p:g.rogueCorridorFloorSlot(0,-152,0,-166,10.8,0,4.0,{cx:0,cz:-137,rx:27,rz:18}),cx:0,cz:-137,rx:27,rz:18}
 ];
 check('傾斜路の床切り欠きは広間の外周を横切らない',clippedSlots.every(slot=>slot.p.points.length>=3&&slot.p.points.every(pt=>(((pt.x-slot.cx)/(slot.rx*.986))**2+((pt.z-slot.cz)/(slot.rz*.986))**2)<=1.002)));
 check('深層の通路脇の岩も仮の0mでなく傾斜路の高さへ追従する',Math.abs(g.rogueInterpolatedFloor(-152,-166,-1.4,-5.2,-160)-(-3.5714285714))<.02&&Math.abs(g.rogueInterpolatedFloor(-152,-166,-1.4,-5.2,-166)-(-5.2))<.02);
+{
+  // v70.10: 通路入口に床のない隙間(見えない壁)ができないこと。実際の歩行判定と床候補を細かく走査する。
+  let gaps=0;
+  for(const v of ['classic','linear']){
+    const G=Shared.getRogueDungeonDefinition(v).gates.length;
+    for(let x=-100;x<=100;x+=.25)for(let z=-220;z<=40;z+=.25){
+      if(Shared.isRogueDungeonWalkable(x,z,G,v)&&!Shared.getRogueDungeonFloorCandidates(x,z,G,v).length)gaps++;
+    }
+  }
+  check('歩行可能なのに床候補がない点が両ダンジョンに存在しない',gaps===0);
+  check('床高が0mでない平らな通路(新ダンジョン深層への通路)も描画床高の補間対象になる',/Math\.abs\(a\.yA\|\|0\)<1e-5\) continue;/.test(html));
+}
 if(failed)process.exit(1);console.log('Rogue geometry runtime checks passed.');

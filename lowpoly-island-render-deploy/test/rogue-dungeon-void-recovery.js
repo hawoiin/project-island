@@ -13,6 +13,6 @@ check('safe position updates only while grounded on a valid walkable floor',/els
 check('void recovery restores a valid safe position and resets falling velocity',/player\.position\.set\(safe\.x,safe\.y,safe\.z\);[\s\S]{0,400}vy=0;grounded=true;wasGrounded=true;camSnap=true;/.test(html));
 check('void recovery explicitly preserves carried equipment and does not call death handling',/直前の安全な床へ戻りました。携行品は失っていません。/.test(html)&&!/player\.position\.y < ROGUE_VOID_RECOVERY_Y[\s\S]{0,900}killPlayer\(\)/.test(html));
 check('build preview fallback is separate from player physics',/const floorInfo = getPlayerFloor\(px, pz\);[\s\S]{0,350}const py = Number\.isFinite\(floorInfo\.y\) \? floorInfo\.y : \(inCaveIndex===ROGUE_DUNGEON_INDEX \? rogueFloorHeight\(px,pz\)/.test(html));
-check('v70.8 title label is active',/<div id="versionLabel"[^>]*>v70\.8<\/div>/.test(html));
+check('v70.10 title label is active',/<div id="versionLabel"[^>]*>v70\.10<\/div>/.test(html));
 console.log(`奈落落下の保護テスト: ${passes}件合格、${failures}件失敗`);
 if(failures)process.exitCode=1;

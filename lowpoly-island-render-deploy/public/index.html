@@ -567,7 +567,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v70.8</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v70.10</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -1679,7 +1679,9 @@ window.startGame = function(NETINIT){
     // 傾斜通路は接続点から接続点まで高さを線形補間し、部屋の床と段差なく結ぶ。
     let best=null;
     for(const a of ROGUE_WALK_AREAS){
-      if(a.type!=='segment'||Math.abs((a.yB||0)-(a.yA||0))<1e-5) continue;
+      if(a.type!=='segment') continue;
+      // 平らな通路でも床高が0mでなければ(新ダンジョンの深層への通路は-1.2m)対象にする。
+      if(Math.abs((a.yB||0)-(a.yA||0))<1e-5&&Math.abs(a.yA||0)<1e-5) continue;
       const dx=a.bx-a.ax,dz=a.bz-a.az,len2=dx*dx+dz*dz;
       const t=len2>1e-8?THREE.MathUtils.clamp(((x-a.ax)*dx+(z-a.az)*dz)/len2,0,1):0;
       const d=pointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz);
@@ -5976,7 +5978,8 @@ window.startGame = function(NETINIT){
     if (!enemyAttackRangeDisplayEnabled){
       for (const en of enemyById.values()) if (en.warn) en.warn.visible = false;
     }
-    if (boss && boss.marks){
+    for (const boss of bosses.values()){
+      if (!boss.marks) continue;
       for (const mark of boss.marks){
         if (mark.fill) mark.fill.visible = enemyAttackRangeDisplayEnabled;
         if (mark.edge) mark.edge.visible = enemyAttackRangeDisplayEnabled;
@@ -10317,7 +10320,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=70.8-bear-boss"></script>
+<script src="shared.js?v=70.10-bear-boss"></script>
 <script src="boot.js"></script>
 </body>
 </html>

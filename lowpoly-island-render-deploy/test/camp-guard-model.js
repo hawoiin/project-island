@@ -29,6 +29,6 @@ check('野営地の番人12体は新モデルkindを使い、旧敵のID範囲�
   shared.ENEMY_CAMP_START === shared.ENEMY_WOLF_COUNT + shared.ENEMY_BOAR_COUNT + shared.ENEMY_LIZARD_COUNT + shared.ENEMY_CRAB_COUNT + shared.ENEMY_JELLY_COUNT + shared.ENEMY_CLASSIC_WOLF_COUNT + shared.ENEMY_CLASSIC_BOAR_COUNT);
 check('新番人の戦闘設定は既存の人型敵と共通',
   shared.ENEMY_KINDS.campGuard === shared.ENEMY_KINDS.raider && shared.BODY_RADIUS.campGuard === 0.45);
-check('タイトル画面はv70.8を表示する', /<div id="versionLabel"[^>]*>v70\.8<\/div>/.test(html));
+check('タイトル画面はv70.10を表示する', /<div id="versionLabel"[^>]*>v70\.10<\/div>/.test(html));
 if (failures) process.exit(1);
 console.log('Camp guard model tests passed.');
