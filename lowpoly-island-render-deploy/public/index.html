@@ -567,7 +567,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v70.10</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v70.11</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -1818,6 +1818,170 @@ window.startGame = function(NETINIT){
     return yA+(yB-yA)*t;
   }
 
+  // ---- v70.11: 傾斜通路(坂)の見た目を作り直す ----
+  // 旧実装は坂を「1枚の板」にし、縁の石を Euler(pitch,yaw) で回していたため、坂の向きによって
+  // 縁が逆向き・別の軸に傾き、端で最大3.7mずれていた。さらに坂が広間の床と重なる所では板が宙に浮いたり、
+  // 高台の床の下へ潜り込んで段差ができていた。
+  // ここでは坂の形を頂点列として直接計算する(THREE に依存しない純粋な関数なのでテストでも同じ物を実行できる)。
+  // 歩行・当たり判定の定義(ROGUE_WALK_AREAS)は一切変えず、描画だけを共有定義に合わせて作る。
+  const ROGUE_RAMP_VIS = Object.freeze({drop:.14, curbH:.42, curbW:.36, thick:.9, step:.6, inside:.975, tread:1.6, minCut:.3});
+  function rogueRampSameAxis(h,a){
+    return h.type==='corridor'&&Math.abs(h.ax-a.ax)<1e-6&&Math.abs(h.az-a.az)<1e-6&&Math.abs(h.bx-a.bx)<1e-6&&Math.abs(h.bz-a.bz)<1e-6;
+  }
+  // 広間の床の切り欠きと同じ幅まで坂を広げる(切り欠きと坂の間に隙間を残さない)。
+  function rogueRampSlotWidth(a,areas){
+    let w=a.width;
+    for(const e of areas){
+      if(e.type!=='ellipse')continue;
+      for(const h of (e.floorHoles||[]))if(rogueRampSameAxis(h,a))w=Math.max(w,h.width);
+    }
+    return w;
+  }
+  // 坂の下に床があれば、その高さ(描画上の面)を返す。坂の側面をそこまで下ろして宙に浮かせない。
+  function rogueRampGroundBelow(areas,x,z,topVis){
+    let best=null;
+    for(const e of areas){
+      if(e.type!=='ellipse')continue;
+      const vis=(Number.isFinite(e.floorY)?e.floorY:0)-ROGUE_RAMP_VIS.drop;
+      if(vis>topVis-.3)continue;
+      const m=((x-e.x)/e.rx)**2+((z-e.z)/e.rz)**2;
+      if(m>ROGUE_RAMP_VIS.inside**2)continue;
+      if(Shared.rogueFloorHoleContainsPoint(e,x,z))continue;
+      if(best===null||vis>best)best=vis;
+    }
+    return best;
+  }
+  // 坂より高い広間の床があれば、その面(坂がその床の切り欠きへ潜る所)を返す。
+  function rogueRampPlaneAbove(areas,a,x,z,topVis){
+    let best=null;
+    for(let i=0;i<areas.length;i++){
+      const e=areas[i];
+      if(e.type!=='ellipse')continue;
+      const vis=(Number.isFinite(e.floorY)?e.floorY:0)-ROGUE_RAMP_VIS.drop;
+      if(vis<topVis-.005)continue;
+      const m=((x-e.x)/e.rx)**2+((z-e.z)/e.rz)**2;
+      if(m>ROGUE_RAMP_VIS.inside**2)continue;
+      const slot=(e.floorHoles||[]).some(h=>rogueRampSameAxis(h,a));
+      if(!slot&&Shared.rogueFloorHoleContainsPoint(e,x,z))continue;
+      if(!best||vis>best.vis)best={vis,index:i,slot};
+    }
+    return best;
+  }
+  function rogueRampBuildShape(a,areas){
+    const V=ROGUE_RAMP_VIS;
+    const dx=a.bx-a.ax,dz=a.bz-a.az,L=Math.hypot(dx,dz);
+    if(!(L>1e-6))return null;
+    const ux=dx/L,uz=dz/L,rx=uz,rz=-ux;
+    const hw=rogueRampSlotWidth(a,areas)*.5,hwo=hw+V.curbW;
+    const yA=a.yA||0,yB=a.yB||0;
+    const N=Math.max(4,Math.ceil(L/V.step));
+    const st=[],cutRange=new Map();
+    for(let i=0;i<=N;i++){
+      const t=i/N,s=L*t,cx=a.ax+ux*s,cz=a.az+uz*s,top=yA+(yB-yA)*t-V.drop;
+      const sides=[-1,1].map(sg=>{
+        const wx=cx+rx*sg*(hw+V.curbW*.5),wz=cz+rz*sg*(hw+V.curbW*.5);
+        const plane=rogueRampPlaneAbove(areas,a,wx,wz,top);
+        const ground=rogueRampGroundBelow(areas,wx,wz,top);
+        return {
+          // 坂が広間の床と同じ高さ以下へ潜る所は、側面を床の高さまで立ち上げて溝の壁にする(縁石が床から飛び出さない)。
+          // それ以外は低い縁石。
+          wallTop:plane?plane.vis+.02:top+V.curbH,
+          base:Math.min(top-V.thick,ground===null?Infinity:ground-.02)
+        };
+      });
+      const mid=rogueRampPlaneAbove(areas,a,cx,cz,top);
+      // 共有定義の切り欠きがない広間(西の高台)の床へ潜る所だけ、描画用の切り欠きを追加する。
+      if(mid&&!mid.slot){
+        const r=cutRange.get(mid.index),depth=mid.vis-top;
+        if(r){r.min=Math.min(r.min,s);r.max=Math.max(r.max,s);r.depth=Math.max(r.depth,depth);}else cutRange.set(mid.index,{min:s,max:s,depth});
+      }
+      st.push({s,cx,cz,top,sides});
+    }
+    const P=(i,lam,y)=>[st[i].cx+rx*lam,y,st[i].cz+rz*lam];
+    const quad=(arr,p0,p1,p2,p3)=>{arr.push(...p0,...p1,...p2,...p0,...p2,...p3);};
+    const top=[],side=[],groove=[];
+    for(let i=0;i<N;i++){
+      const q0=st[i],q1=st[i+1];
+      quad(top,P(i,-hw,q0.top),P(i,hw,q0.top),P(i+1,hw,q1.top),P(i+1,-hw,q1.top));
+      for(let k=0;k<2;k++){
+        const sg=k?1:-1,s0=q0.sides[k],s1=q1.sides[k];
+        quad(side,P(i,sg*hw,q0.top),P(i,sg*hw,s0.wallTop),P(i+1,sg*hw,s1.wallTop),P(i+1,sg*hw,q1.top));
+        quad(side,P(i,sg*hw,s0.wallTop),P(i,sg*hwo,s0.wallTop),P(i+1,sg*hwo,s1.wallTop),P(i+1,sg*hw,s1.wallTop));
+        quad(side,P(i,sg*hwo,s0.wallTop),P(i,sg*hwo,s0.base),P(i+1,sg*hwo,s1.base),P(i+1,sg*hwo,s1.wallTop));
+      }
+      quad(side,P(i,-hwo,q0.sides[0].base),P(i,hwo,q0.sides[1].base),P(i+1,hwo,q1.sides[1].base),P(i+1,-hwo,q1.sides[0].base));
+    }
+    for(const i of [0,N]){
+      const q=st[i],bL=q.sides[0].base,bR=q.sides[1].base,wL=q.sides[0].wallTop,wR=q.sides[1].wallTop;
+      quad(side,P(i,-hw,bL),P(i,hw,bR),P(i,hw,q.top),P(i,-hw,q.top));
+      quad(side,P(i,-hwo,bL),P(i,-hw,bL),P(i,-hw,wL),P(i,-hwo,wL));
+      quad(side,P(i,hw,bR),P(i,hwo,bR),P(i,hwo,wR),P(i,hw,wR));
+    }
+    // 石畳の継ぎ目。坂の傾きが目で分かるよう、面に沿った細い溝を一定間隔で入れる。
+    const nG=Math.max(0,Math.floor(L/V.tread));
+    const onSurface=(s,lam)=>[a.ax+ux*s+rx*lam,yA+(yB-yA)*(s/L)-V.drop+.015,a.az+uz*s+rz*lam];
+    for(let g=1;g<=nG;g++){
+      const s0=L*g/(nG+1),s1=s0+.1,lam=hw-.08;
+      quad(groove,onSurface(s0,-lam),onSurface(s0,lam),onSurface(s1,lam),onSurface(s1,-lam));
+    }
+    const cuts=[];
+    for(const [index,r] of cutRange){
+      // 床との差が縁石の高さ程度までなら、床の縁が坂の面を隠しても段差にならない。切り欠きは深く潜る所だけ。
+      if(r.depth<V.minCut)continue;
+      const s0=r.min-.5,s1=Math.min(L,r.max)+.02;
+      const w=(s,lam)=>({x:a.ax+ux*s+rx*lam,z:a.az+uz*s+rz*lam});
+      cuts.push({index,points:[w(s0,-hw),w(s0,hw),w(s1,hw),w(s1,-hw)]});
+    }
+    return {L,N,hw,hwo,stations:st,top,side,groove,cuts};
+  }
+  // 坂(床高が変わる通路)ごとの形と、広間の床へ追加する描画用の切り欠きをまとめて作る。
+  function rogueRampBuildAll(areas){
+    const shapes=new Map(),cutsByArea=new Map();
+    areas.forEach((a,i)=>{
+      if(a.type!=='segment'||Math.abs((a.yB||0)-(a.yA||0))<1e-5)return;
+      const shape=rogueRampBuildShape(a,areas);
+      if(!shape)return;
+      shapes.set(i,shape);
+      for(const c of shape.cuts){
+        if(!cutsByArea.has(c.index))cutsByArea.set(c.index,[]);
+        cutsByArea.get(c.index).push(c.points);
+      }
+    });
+    return {shapes,cutsByArea};
+  }
+  // 楕円でクリップした切り欠きの多角形から、重なった点や極端に小さい面を除く(三角形分割を安定させる)。
+  function rogueRampCleanPolygon(points){
+    const out=[];
+    for(const p of points){
+      const q=out[out.length-1];
+      if(!q||Math.hypot(p.x-q.x,p.z-q.z)>1e-3)out.push(p);
+    }
+    while(out.length>1&&Math.hypot(out[0].x-out[out.length-1].x,out[0].z-out[out.length-1].z)<=1e-3)out.pop();
+    let area=0;
+    for(let i=0;i<out.length;i++){const p=out[i],q=out[(i+1)%out.length];area+=p.x*q.z-q.x*p.z;}
+    return out.length>=3&&Math.abs(area)*.5>=.05?out:[];
+  }
+  function makeRogueRampMaterials(topColor,sideColor){
+    const base={roughness:1,flatShading:true,side:THREE.DoubleSide};
+    return {
+      top:new THREE.MeshStandardMaterial({...base,color:topColor}),
+      side:new THREE.MeshStandardMaterial({...base,color:sideColor}),
+      groove:new THREE.MeshStandardMaterial({...base,color:0x2d3236,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2})
+    };
+  }
+  function addRogueRampMeshes(scene,shape,mats){
+    for(const [positions,mat] of [[shape.top,mats.top],[shape.side,mats.side],[shape.groove,mats.groove]]){
+      if(!positions.length)continue;
+      const geo=new THREE.BufferGeometry();
+      geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+      geo.computeVertexNormals();
+      const mesh=new THREE.Mesh(geo,mat);
+      mesh.receiveShadow=true;
+      mesh.userData.rogueRamp=true;
+      scene.add(mesh);
+    }
+  }
+
   function buildRogueDungeonInterior(){
     const previousRandom = Math.random;
     // 同じ島セッションでは参加者全員に同じ地形を作る。戦利品の抽選は挑戦ごとに別管理。
@@ -1898,7 +2062,11 @@ window.startGame = function(NETINIT){
           wall.rotation.set(pitch,angleY,0); s.add(wall);
         }
       }
-      for(const a of ROGUE_WALK_AREAS){
+      // v70.11: 坂は専用の形状で作る(縁の向き・床との重なり・高台の床の下へ潜る段差を解消)。
+      const rampMats=makeRogueRampMaterials(0x4a4b47,0x42494f);
+      const rampBuild=rogueRampBuildAll(ROGUE_WALK_AREAS);
+      for(let ai=0;ai<ROGUE_WALK_AREAS.length;ai++){
+        const a=ROGUE_WALK_AREAS[ai];
         if(a.type==='ellipse'){
           // 切り欠きは共有地形データを参照し、描画と移動判定で同じ定義を使う。
           const floorCuts=(a.floorHoles||[]).map(h=>{
@@ -1906,8 +2074,15 @@ window.startGame = function(NETINIT){
             if(h.type==='corridor')return rogueCorridorFloorSlot(h.ax,h.az,h.bx,h.bz,h.width,h.extendStart||0,h.extendEnd||0,{cx:a.x,cz:a.z,rx:a.rx,rz:a.rz});
             return null;
           }).filter(Boolean);
+          for(const pts of (rampBuild.cutsByArea.get(ai)||[])){
+            const clipped=rogueRampCleanPolygon(rogueClipPolygonToEllipse(pts,a.x,a.z,a.rx,a.rz));
+            if(clipped.length>=3)floorCuts.push({type:'polygon',points:clipped});
+          }
           addEllipseFloor(a.x,a.z,a.rx,a.rz,Math.random()<.22?1:Math.random()<.25?2:0,Number.isFinite(a.floorY)?a.floorY:0,floorCuts);
-        } else if(a.type==='segment') addCorridorFloor(a.ax,a.az,a.bx,a.bz,a.width,a.yA||0,a.yB||0);
+        } else if(a.type==='segment'){
+          if(rampBuild.shapes.has(ai))addRogueRampMeshes(s,rampBuild.shapes.get(ai),rampMats);
+          else addCorridorFloor(a.ax,a.az,a.bx,a.bz,a.width,a.yA||0,a.yB||0);
+        }
       }
       // 古代の石畳。均一なタイル床にせず、ひび割れたパネルを要所へだけ置く。
       const tileGeo=new THREE.BoxGeometry(2.4,.1,1.25);
@@ -2169,7 +2344,11 @@ window.startGame = function(NETINIT){
           wall.rotation.set(pitch,angleY,0); s.add(wall);
         }
       }
-      for(const a of ROGUE_WALK_AREAS){
+      // v70.11: 坂は専用の形状で作る(縁の向き・床との重なり・高台の床の下へ潜る段差を解消)。
+      const rampMats=makeRogueRampMaterials(0x4a4b47,0x4b3d38);
+      const rampBuild=rogueRampBuildAll(ROGUE_WALK_AREAS);
+      for(let ai=0;ai<ROGUE_WALK_AREAS.length;ai++){
+        const a=ROGUE_WALK_AREAS[ai];
         if(a.type==='ellipse'){
           // 切り欠きは共有地形データを参照し、描画と移動判定で同じ定義を使う。
           const floorCuts=(a.floorHoles||[]).map(h=>{
@@ -2177,8 +2356,15 @@ window.startGame = function(NETINIT){
             if(h.type==='corridor')return rogueCorridorFloorSlot(h.ax,h.az,h.bx,h.bz,h.width,h.extendStart||0,h.extendEnd||0,{cx:a.x,cz:a.z,rx:a.rx,rz:a.rz});
             return null;
           }).filter(Boolean);
+          for(const pts of (rampBuild.cutsByArea.get(ai)||[])){
+            const clipped=rogueRampCleanPolygon(rogueClipPolygonToEllipse(pts,a.x,a.z,a.rx,a.rz));
+            if(clipped.length>=3)floorCuts.push({type:'polygon',points:clipped});
+          }
           addEllipseFloor(a.x,a.z,a.rx,a.rz,Math.random()<.22?1:Math.random()<.25?2:0,Number.isFinite(a.floorY)?a.floorY:0,floorCuts);
-        } else if(a.type==='segment') addCorridorFloor(a.ax,a.az,a.bx,a.bz,a.width,a.yA||0,a.yB||0);
+        } else if(a.type==='segment'){
+          if(rampBuild.shapes.has(ai))addRogueRampMeshes(s,rampBuild.shapes.get(ai),rampMats);
+          else addCorridorFloor(a.ax,a.az,a.bx,a.bz,a.width,a.yA||0,a.yB||0);
+        }
       }
       // 古代の石畳。均一なタイル床にせず、ひび割れたパネルを要所へだけ置く。
       const tileGeo=new THREE.BoxGeometry(2.4,.1,1.25);
@@ -10320,7 +10506,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=70.10-bear-boss"></script>
+<script src="shared.js?v=70.11-dungeon-ramp"></script>
 <script src="boot.js"></script>
 </body>
 </html>
