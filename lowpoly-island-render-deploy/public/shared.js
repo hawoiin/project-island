@@ -309,7 +309,19 @@
         if(metric<=1.021&&!rogueFloorHoleContainsPoint(a,x,z))result.push({id:`${variant}:ellipse:${i}`,kind:'ellipse',y:Number.isFinite(a.floorY)?a.floorY:0,metric,area:a});
       }
     }
-    return result;
+    return rogueDropFloorsInsideRampBody(result);
+  }
+  // v70.12: 坂は石の躯体で、面から下の広間の床までが石で埋まっている(描画: rogueRampBuildShape)。
+  // 坂の面より低い床は「石の中」なので、立てる床として返さない。
+  // 坂の真下に広間の床が重なる所(西の高台への上り坂、深層への坂が下の広間へ届く所)で、
+  // 坂の始点の脇や側面から広間の床の高さのまま坂の中へ歩き込めてしまうのを防ぐ。
+  // 坂の始点・終点付近で面が床と同じ高さ(差がRAMP_BODY_MIN_GAP以下)の間は、どちらにも立てる。
+  const ROGUE_RAMP_BODY_MIN_GAP = 0.05;
+  function rogueDropFloorsInsideRampBody(candidates){
+    let rampTop=-Infinity;
+    for(const c of candidates)if(c.kind==='ramp'&&c.y>rampTop)rampTop=c.y;
+    if(rampTop===-Infinity)return candidates;
+    return candidates.filter(c=>c.kind==='ramp'||c.y>=rampTop-ROGUE_RAMP_BODY_MIN_GAP);
   }
   function isRogueDungeonWalkable(x,z,openGates=0,variant='classic'){
     if(!Number.isFinite(x)||!Number.isFinite(z))return false;

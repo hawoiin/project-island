@@ -27,8 +27,10 @@ if(ascendingRamp){
   const underRamp=T.rogueFloorCandidatesAt(rampMid.x,rampMid.z,3);
   const rampFloor=underRamp.find(c=>c.kind==='ramp');
   const lowerFloor=underRamp.find(c=>Math.abs(c.y)<.05);
-  check('坂の投影範囲と低層床が重なる場合は両方の床候補を保持する',!!rampFloor&&!!lowerFloor,`ys=${underRamp.map(c=>c.y)}`);
-  check('低い床にいるプレイヤーを頭上の坂へ吸い上げない',!!lowerFloor&&Math.abs((T.rogueChooseConnectedFloor(underRamp,0,0,false)?.y||0)-lowerFloor.y)<.05,`ys=${underRamp.map(c=>c.y)}`);
+  // v70.12: 坂は石の躯体(面から下の広間の床まで石で埋まる)なので、坂の面より低い床は「石の中」で立てない。
+  // 以前(v64.1〜v70.11)は両方の床候補を保持していたため、広間の床の高さのまま坂の下へ歩き込めた。
+  check('坂の投影範囲では、坂より低い床(石の躯体の中)を床候補に含めない',!!rampFloor&&!lowerFloor,`ys=${underRamp.map(c=>c.y)}`);
+  check('低い床にいるプレイヤーは頭上の坂の下(石の中)へ入れる床を選べない',T.rogueChooseConnectedFloor(underRamp,0,0,false)===null,`ys=${underRamp.map(c=>c.y)}`);
   check('すでに坂の高さにいる場合は同じ坂面を選び続ける',!!rampFloor&&T.rogueChooseConnectedFloor(underRamp,rampFloor.y,rampFloor.y,false,rampFloor.id)?.id===rampFloor.id);
   const entry={x:ascendingRamp.ax+(ascendingRamp.bx-ascendingRamp.ax)*.02,z:ascendingRamp.az+(ascendingRamp.bz-ascendingRamp.az)*.02};
   const climb={x:ascendingRamp.ax+(ascendingRamp.bx-ascendingRamp.ax)*.20,z:ascendingRamp.az+(ascendingRamp.bz-ascendingRamp.az)*.20};
@@ -41,7 +43,7 @@ if(ascendingRamp){
   const outer={x:center.x+nx*(limit+.3),z:center.z+nz*(limit+.3)},inner={x:center.x+nx*(limit-.3),z:center.z+nz*(limit-.3)};
   context.rogueRun.playerFloorSurfaceId=null;
   const canMoveOnLowerFloor=T.rogueDungeonMovePathAllowed(outer.x,outer.z,inner.x,inner.z,3,0,false);
-  check('坂の側面を横切っても、下層床が連続する場合は下層の高さを保つ',canMoveOnLowerFloor&&String(context.rogueRun.playerFloorSurfaceId||'').startsWith('classic:ellipse:'),`surface=${context.rogueRun.playerFloorSurfaceId}`);
+  check('低い床から坂の側面を横切って、床の高さのまま坂の中へは入れない',canMoveOnLowerFloor===false,`allowed=${canMoveOnLowerFloor} surface=${context.rogueRun.playerFloorSurfaceId}`);
 }else check('低層床と重なる傾斜路がある',false);
 // A location that only has an upper surface cannot be entered from below while grounded.
 let foundHighOnly=null;

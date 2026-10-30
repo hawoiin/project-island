@@ -567,7 +567,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v70.11</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v70.12</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -1707,6 +1707,12 @@ window.startGame = function(NETINIT){
   // 重なった上下階の候補を保持し、現在の足元高さから連続している床を選ぶ。
   const ROGUE_MAX_STEP_UP = 0.45;
   const ROGUE_AIRBORNE_FLOOR_TOLERANCE = 0.06;
+  // v70.12: 空中のプレイヤーが「面が足元より少し上にあっても接続できる床」とみなす高さ。
+  // 上り坂へ向かってジャンプすると、1フレームの間に坂の面が足元より上へ持ち上がる(低fps・ダッシュでは0.5m前後)。
+  // 以前は歩行の乗り上げ段差(0.45m)を1歩でも超えると「接続できる床なし」になり、
+  // 坂の面や頂上の広間の床の下へ抜けて、奈落(-9m)まで落ちていた。
+  // 重なって存在する別の階の床との段差は最小でも2.6mなので、1.0mなら別の階の床へ誤って着地しない。
+  const ROGUE_LANDING_SLOPE_REACH = 1.0;
   const ROGUE_MOVE_SAMPLE_SPACING = 0.30;
   // 最深部の通常床(-5.2m)より十分下へ落ちた場合は、直前の安全な床へ戻す。
   // 足場判定の穴で探索が永久に停止するのを防ぐ保険で、携行品は失わない。
@@ -1720,7 +1726,7 @@ window.startGame = function(NETINIT){
     if(!Array.isArray(candidates)||!candidates.length)return null;
     const eligible=candidates.filter(c=>
       c.y<=referenceY+ROGUE_MAX_STEP_UP+1e-6 ||
-      (airborne===true && Number.isFinite(footY) && footY>=c.y-ROGUE_AIRBORNE_FLOOR_TOLERANCE)
+      (airborne===true && Number.isFinite(footY) && footY>=c.y-ROGUE_LANDING_SLOPE_REACH)
     );
     if(!eligible.length)return null;
     // 連続移動で使っていた同じ床面は、足元との高さ差が小さい間だけ維持する。
@@ -8584,8 +8590,9 @@ window.startGame = function(NETINIT){
     if(isRogueDungeonFloor){
       if(hasRogueDungeonFloor && grounded && player.position.y<=groundY){
         player.position.y=groundY;vy=0;grounded=true;
-      }else if(hasRogueDungeonFloor && !grounded && vy<=0 && yBeforeGravity>=groundY-1e-4 && player.position.y<=groundY){
-        // 空中では上昇中や床の下からではなく、上から実際に床面を横切った時だけ着地する。
+      }else if(hasRogueDungeonFloor && !grounded && vy<=0 && yBeforeGravity>=groundY-ROGUE_LANDING_SLOPE_REACH && player.position.y<=groundY){
+        // 空中では上昇中ではなく、落下中に床面へ届いた時だけ着地する。
+        // 上り坂では面が1フレームで持ち上がるため、足元が面より少し(歩行の段差以内)低くても着地とみなす。
         player.position.y=groundY;vy=0;grounded=true;
       }else grounded=false;
     }else if(player.position.y<=groundY){
@@ -10506,7 +10513,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=70.11-dungeon-ramp"></script>
+<script src="shared.js?v=70.12-ramp-collision"></script>
 <script src="boot.js"></script>
 </body>
 </html>

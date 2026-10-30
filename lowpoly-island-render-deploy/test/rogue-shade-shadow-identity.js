@@ -5,7 +5,7 @@ const fs=require('fs');
 const path=require('path');
 const html=fs.readFileSync(path.join(__dirname,'../public/index.html'),'utf8');
 // シェイドの原案は「暗い遺跡に潜む影の住人」。狼男・獣・ロボットへ寄る特徴が復活しないかを検査する。
-assert.match(html,/>v70\.11<\/div>/);
+assert.match(html,/>v70\.12<\/div>/);
 assert.match(html,/shadeSkull:rogueRingLoftGeometry/);
 assert.match(html,/shadeJaw:rogueRingLoftGeometry/);
 assert.match(html,/shadeEye:new THREE\.MeshStandardMaterial\(\{color:0x9bdcff,emissive:0x348fc4/);
