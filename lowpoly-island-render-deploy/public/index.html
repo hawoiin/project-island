@@ -47,8 +47,6 @@
     font-size:34px; letter-spacing:.08em; margin:0 0 6px; font-weight:700;
   }
   #startOverlay p { opacity:.65; margin:0 0 28px; font-size:14px; }
-  #freePlanNotice { max-width:min(88vw,700px); box-sizing:border-box; margin:0 18px 18px !important; padding:10px 13px; border:1px solid rgba(232,192,125,.42); border-radius:10px; background:rgba(232,192,125,.08); color:#f5deb0; font-size:12px !important; line-height:1.55; opacity:.94 !important; }
-  #freePlanSaveNotice, #freePlanRogueNotice { color:#f5deb0; border-left:2px solid rgba(232,192,125,.65); padding-left:9px; }
   #startOverlay button {
     background:#e8c07d; color:#241a0d; border:none; padding:14px 32px;
     font-size:15px; font-weight:700; border-radius:999px; cursor:pointer;
@@ -565,11 +563,10 @@
 
 <div id="startOverlay">
   <h1>探索の島</h1>
-  <p id="freePlanNotice" hidden>Render Free仕様：共有ワールドとダンジョンの進行・遺品袋はサーバー内の一時データです。スリープ・再起動・更新後は初期状態に戻ることがあります。大切な建築は設定からJSONを書き出して保管してください。個人データはこのブラウザ内に保存されます。</p>
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v70.19</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v70.21</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -621,7 +618,6 @@
   <div class="panel">
     <h2 id="roguePartyTitle">遺跡ダンジョンへ入る</h2>
     <p>このワールドにいる全員が、コード入力なしで同じ探索ランに入れます。宝箱の報酬は全員が個別に獲得できます。</p>
-    <small id="freePlanRogueNotice" hidden>Render Freeではサーバーの再起動・スリープ・更新で探索ランと遺品袋が失われます。再起動中に探索中だった場合は中断扱いとなり、携行装備と未精算の欠片を失います。保管庫と精算済み欠片はブラウザ側に残ります。</small>
     <button id="roguePartyWorld" type="button">みんなと一緒に入る</button>
     <button id="roguePartySolo" type="button">ソロで入る</button>
     <details id="roguePartyCodeBox">
@@ -716,7 +712,6 @@
     <section id="saveTools">
       <h3>セーブデータ</h3>
       <p>プレイヤーデータと共有ワールドの状態を1つのJSONファイルに書き出せます。インポート時はプレイヤーデータを置き換えます。</p>
-      <p id="freePlanSaveNotice" hidden>Render Freeではサーバー上のワールド保存は一時的です。スリープ・再起動・再デプロイ後は建築・採集・宝箱の状態が初期化されます。残したい場合はJSONを定期的に書き出して手元へ保管してください。共有ワールドの復元には管理者認証が必要です。</p>
       <div id="saveToolsButtons">
         <button id="saveExportButton" type="button">書き出す</button>
         <button id="saveImportButton" type="button">読み込む</button>
@@ -949,9 +944,6 @@ window.startGame = function(NETINIT){
   // Compare the saved marker on first page load too: a fresh page otherwise
   // receives only the new session ID and cannot tell that Render restarted.
   const initialServerSessionChanged = FREE_PLAN_SESSION_MODE && !!previousServerSessionId && !!currentServerSessionId && previousServerSessionId !== currentServerSessionId;
-  document.getElementById('freePlanNotice').hidden = !FREE_PLAN_SESSION_MODE;
-  document.getElementById('freePlanSaveNotice').hidden = !FREE_PLAN_SESSION_MODE;
-  document.getElementById('freePlanRogueNotice').hidden = !FREE_PLAN_SESSION_MODE;
 
   // 島の生成中だけMath.randomをシード付きにして、全員が同じ島(木・岩・遺跡・洞窟)を生成する
   const realRandom = Math.random;
@@ -2711,7 +2703,13 @@ window.startGame = function(NETINIT){
     shadeBone:new THREE.MeshStandardMaterial({color:0xd9d6ff,emissive:0x2c2850,emissiveIntensity:.5,flatShading:true,roughness:.7}),
     shadeEye:new THREE.MeshStandardMaterial({color:0xa8f0ff,emissive:0x3fd0ff,emissiveIntensity:1.3,flatShading:true,roughness:.5}),
     shadeCrystal:new THREE.MeshStandardMaterial({color:0xb9a6ff,emissive:0x6a42ff,emissiveIntensity:1.1,flatShading:true,roughness:.4}),
-    crawler:new THREE.MeshStandardMaterial({color:0x9a5a43,emissive:0x35140d,emissiveIntensity:.25,flatShading:true,roughness:.9}),
+    crawler:new THREE.MeshStandardMaterial({color:0x8a4a35,emissive:0x2a100a,emissiveIntensity:.22,flatShading:true,roughness:.85}),
+    // 甲殻虫クロウラー v70.21: 「錆色の甲殻 + 砂色の縞と関節 + 暗い脚 + 酸っぱい黄緑に光る目と腺」。光るのは目4つと尾の腺だけ。
+    // 黄緑は、シェイドの青白・スピッターの水色・センチネルの琥珀・チャージャーの赤橙と取り違えない色として選んだ。
+    crawlerHide:new THREE.MeshStandardMaterial({color:0xffffff,vertexColors:true,flatShading:true,roughness:.85}),
+    crawlerLeg:new THREE.MeshStandardMaterial({color:0x4d281f,emissive:0x140806,emissiveIntensity:.2,flatShading:true,roughness:.9}),
+    crawlerPlate:new THREE.MeshStandardMaterial({color:0xd0ae7c,emissive:0x2e2414,emissiveIntensity:.2,flatShading:true,roughness:.7}),
+    crawlerGlow:new THREE.MeshStandardMaterial({color:0xeaff8a,emissive:0x9be31a,emissiveIntensity:1.2,flatShading:true,roughness:.4}),
     spitter:new THREE.MeshStandardMaterial({color:0x397b83,emissive:0x146c72,emissiveIntensity:.45,flatShading:true,roughness:.72}),
     charger:new THREE.MeshStandardMaterial({color:0x9b5837,emissive:0x5a2414,emissiveIntensity:.35,flatShading:true,roughness:.88}),
     sentinel:new THREE.MeshStandardMaterial({color:0x777a78,emissive:0x242a2b,emissiveIntensity:.28,flatShading:true,roughness:.85}),
@@ -2765,7 +2763,6 @@ window.startGame = function(NETINIT){
     return geometry;
   }
   const ROGUE_GEOMETRIES={
-    crawlerBody:new THREE.DodecahedronGeometry(.72,0), crawlerLeg:new THREE.ConeGeometry(.17,.95,5),
     body:new THREE.IcosahedronGeometry(.82,0), bossBody:new THREE.IcosahedronGeometry(1.45,0),
     head:new THREE.DodecahedronGeometry(.42,0), bossHead:new THREE.DodecahedronGeometry(.62,0),
     arm:new THREE.ConeGeometry(.28,1.2,5), bossArm:new THREE.ConeGeometry(.48,1.9,5),
@@ -2883,6 +2880,33 @@ window.startGame = function(NETINIT){
     rogueRun.lastCarrySyncAt=now;
     Net.send({t:'rogueCarryState',weaponBonus:rogueRun.weaponBonus,armorBonus:rogueRun.armorBonus,shards:rogueRun.shards,attackBuffMs:Math.round(Math.max(0,attackBuffTimer)*1000),speedBuffMs:Math.round(Math.max(0,speedBuffTimer)*1000)});
   }
+  // 甲殻虫クロウラー(v70.21)の部品。甲殻は8角形断面の連続した殻(頂点色: 背が錆色・腹が暗い色)、その上に砂色の縞を3本巻く。
+  // 顔の前方はローカル -Z。脚は「股関節の向き → 腿 → 膝 → 脛」の2関節で、足先は逆運動学で地面へ置く。
+  const ROGUE_CRAWLER_RINGS=[
+    {z:-.50,w:.30,hu:.16,hl:.12,y:.62},{z:-.32,w:.46,hu:.26,hl:.17,y:.64},{z:-.05,w:.56,hu:.34,hl:.20,y:.66},
+    {z:.30,w:.58,hu:.40,hl:.22,y:.66},{z:.66,w:.48,hu:.34,hl:.18,y:.62},{z:.95,w:.22,hu:.16,hl:.10,y:.56}];
+  // 甲殻の断面を z で補間する(縞が甲殻に沿うように使う)。inflate は縞を殻より少し大きくする量。
+  function rogueCrawlerSection(z,inflate){
+    const R=ROGUE_CRAWLER_RINGS;let i=0;while(i<R.length-2&&z>R[i+1].z)i++;
+    const a=R[i],b=R[i+1],t=Math.max(0,Math.min(1,(z-a.z)/(b.z-a.z))),L=k=>a[k]+(b[k]-a[k])*t;
+    return {z,w:L('w')+inflate,hu:L('hu')+inflate,hl:L('hl')+inflate,y:L('y')};
+  }
+  const ROGUE_CRAWLER_LEG={L1:.56,L2:.78};
+  const ROGUE_CRAWLER_GEOMETRIES={
+    shell:rogueRingLoftGeometry(ROGUE_CRAWLER_RINGS,0x9a5238,0x3a2018),
+    bandA:rogueRingLoftGeometry([rogueCrawlerSection(-.20,.025),rogueCrawlerSection(-.08,.025)],0xd8b684,0xb89868),
+    bandB:rogueRingLoftGeometry([rogueCrawlerSection(.18,.025),rogueCrawlerSection(.31,.025)],0xd8b684,0xb89868),
+    bandC:rogueRingLoftGeometry([rogueCrawlerSection(.54,.025),rogueCrawlerSection(.66,.025)],0xd8b684,0xb89868),
+    head:new THREE.DodecahedronGeometry(.27,0),
+    eye:new THREE.OctahedronGeometry(.09,0),
+    gland:new THREE.OctahedronGeometry(.13,0),
+    fang:new THREE.ConeGeometry(.07,.40,4),
+    antenna:new THREE.ConeGeometry(.022,.55,3),
+    spike:new THREE.ConeGeometry(.07,.22,4),
+    femur:new THREE.CylinderGeometry(.07,.10,ROGUE_CRAWLER_LEG.L1,5),
+    knee:new THREE.DodecahedronGeometry(.09,0),
+    tibia:new THREE.ConeGeometry(.066,ROGUE_CRAWLER_LEG.L2,5)
+  };
   // 石の番兵(v70.19)の部品。六角柱と十二面体で「削り出した石」の面を出す。顔の前方はローカル -Z。
   // シェイドの試験用スタブには存在しない形状を使うので、ROGUE_GEOMETRIES とは別の定数にしてある。
   const ROGUE_SENTINEL_GEOMETRIES={
@@ -2906,12 +2930,57 @@ window.startGame = function(NETINIT){
     const g=new THREE.Group();
     const mat=boss?ROGUE_ENEMY_MATS.boss:(ROGUE_ENEMY_MATS[kind]||ROGUE_ENEMY_MATS.shade);
     let visualRig=null;
-    if(kind==='crawler'){
-      const body=new THREE.Mesh(ROGUE_GEOMETRIES.crawlerBody,mat); body.position.y=.72; body.scale.set(1.15,.72,1.3); g.add(body);
-      for(let i=0;i<6;i++){
-        const leg=new THREE.Mesh(ROGUE_GEOMETRIES.crawlerLeg,mat); const a=i/6*Math.PI*2;
-        leg.position.set(Math.cos(a)*.67,.32,Math.sin(a)*.68); leg.rotation.z=Math.cos(a)*.8; leg.rotation.x=Math.sin(a)*.55; g.add(leg);
+    if(kind==='crawler'&&!boss){
+      // v70.21: 甲殻虫。錆色の殻に砂色の縞、前に黄緑の目4つと大顎、6本の2関節の脚(膝が体より高く上がる)。
+      // 光るのは目と尾の腺だけ。骨組みは 体(殻・頭・脚の付け根)→首→大顎・触角／股関節の向き→腿→膝→脛。
+      // 足先は毎フレーム逆運動学で地面へ置く(体が傾いても足が浮かない・潜らない)。表示だけの変更で、判定の大きさは変わらない。
+      const M=ROGUE_ENEMY_MATS,G=ROGUE_CRAWLER_GEOMETRIES,LEG=ROGUE_CRAWLER_LEG;
+      const part=(parent,geo,m,px,py,pz,o={})=>{
+        const mesh=new THREE.Mesh(geo,m);mesh.position.set(px,py,pz);
+        if(o.s)mesh.scale.set(o.s[0],o.s[1],o.s[2]);
+        if(o.r)mesh.rotation.set(o.r[0],o.r[1],o.r[2]);
+        parent.add(mesh);return mesh;
+      };
+      const glowMat=M.crawlerGlow.clone();   // 敵ごとに光り方を変えるので、発光材だけは複製する
+      const body=new THREE.Group();g.add(body);
+      part(body,G.shell,M.crawlerHide,0,0,0);
+      part(body,G.bandA,M.crawlerHide,0,0,0);part(body,G.bandB,M.crawlerHide,0,0,0);part(body,G.bandC,M.crawlerHide,0,0,0);
+      for(const sz of [-.14,.24,.60]){const sec=rogueCrawlerSection(sz,0);part(body,G.spike,M.crawlerLeg,0,sec.y+sec.hu+.07,sz,{r:[.25,0,0]});}   // 背の棘(少し後ろへ倒れる)
+      const gland=part(body,G.gland,glowMat,0,.60,.98,{s:[1,1,1.3]});
+      // 頭: 首の付け根で上下左右に動く。前面に目4つ、下に大顎2本(根元で開閉する)、上に触角2本。
+      const head=new THREE.Group();head.position.set(0,.60,-.50);body.add(head);
+      part(head,G.head,mat,0,0,-.21,{s:[1,.78,1.05]});
+      const eyes=[];
+      for(const side of [-1,1]){
+        eyes.push({mesh:part(head,G.eye,glowMat,side*.125,.07,-.425,{s:[1,.9,.75]}),base:[1,.9,.75]});
+        eyes.push({mesh:part(head,G.eye,glowMat,side*.065,.16,-.39,{s:[.55,.55,.45]}),base:[.55,.55,.45]});
       }
+      const jaws=[],antennae=[];
+      for(const side of [-1,1]){
+        const jaw=new THREE.Group();jaw.position.set(side*.10,-.07,-.38);jaw.rotation.set(-.25,-side*.3,0);head.add(jaw);
+        part(jaw,G.fang,M.crawlerPlate,0,0,-.20,{r:[-Math.PI/2,0,0]});
+        jaws.push({pivot:jaw,side});
+        const ant=new THREE.Group();ant.position.set(side*.07,.15,-.10);ant.rotation.set(-1,0,-side*.35);head.add(ant);
+        part(ant,G.antenna,M.crawlerLeg,0,.275,0);
+        antennae.push({pivot:ant,side});
+      }
+      // 脚: 3列×左右。列ごとに付け根の位置と、立っているときの足先の位置を決める(足先は体の原点を基準にした地面上の点)。
+      const legs=[],rows=[{hx:.42,hz:-.28,gx:.76,gz:-.76},{hx:.52,hz:.08,gx:.96,gz:.05},{hx:.50,hz:.46,gx:.80,gz:.90}];
+      rows.forEach((row,ri)=>{
+        for(const side of [-1,1]){
+          const yaw=new THREE.Group();yaw.position.set(side*row.hx,.60,row.hz);body.add(yaw);
+          const upper=new THREE.Group();yaw.add(upper);
+          part(upper,G.femur,M.crawlerLeg,LEG.L1/2,0,0,{r:[0,0,-Math.PI/2]});
+          part(upper,G.knee,M.crawlerPlate,LEG.L1,0,0);
+          const lower=new THREE.Group();lower.position.set(LEG.L1,0,0);upper.add(lower);
+          part(lower,G.tibia,M.crawlerLeg,LEG.L2/2,0,0,{r:[0,0,-Math.PI/2]});
+          // 三脚歩行: 左前・右中・左後ろが一組、右前・左中・右後ろがもう一組。
+          legs.push({yaw,upper,lower,side,row:ri,hip:[side*row.hx,.60,row.hz],rest:[side*row.gx,row.gz],phase:(ri+(side>0?1:0))%2?Math.PI:0});
+        }
+      });
+      visualRig={crawler:true,body,head,jaws,antennae,eyes,gland,glowMat,legs,gaitPhase:Math.random()*Math.PI*2,phase:'idle',phaseTime:0,pose:null};
+      rogueCrawlerApplyBody(visualRig,0,0,0,0,0);
+      for(const leg of legs)rogueCrawlerPlant(visualRig,leg,leg.rest[0],0,leg.rest[1]);
     }else if(kind==='shade'&&!boss){
       // v70.17: ぼろの外套と裾をまとい、フードの奥で青白い目が光る「影の住人」。淡い仮面と後ろへ流れる角、肩の結晶、胸の青白い核。
       // 骨組み(骨盤→胴→頭／肩→肘→手首／股関節→膝→足首)と基準姿勢の考え方は v70.6 から変えず、見た目の部品だけを入れ替えた。
@@ -3080,6 +3149,118 @@ window.startGame = function(NETINIT){
     warningMesh.rotation.x=-Math.PI/2;warningMesh.position.set(x,rogueFloorHeight(x,z)+.065,z);warningMesh.visible=false;warningMesh.renderOrder=4;sceneRef.add(warningMesh);
     return {kind,x,z,targetX:x,targetZ:z,targetYaw:0,hp,maxHp:hp,stage,boss:!!boss,optional:!!optional,rogueId,mesh:g,warningMesh,visualRig,phase:'idle',attackMode:'',aimX:x,aimZ:z,attackRadius:1.5,cooldown:1+Math.random(),dying:false,dieT:0,flash:0};
   }
+  // 甲殻虫クロウラー(v70.21)の表示アニメーション。AI・攻撃判定・同期はサーバー側で、ここは見た目だけを動かす。
+  // 体は重心(ROGUE_CRAWLER_PIVOT_Y の高さ)を中心に傾け、脚は足先の目標(地面上の点)から逆運動学で毎フレーム解く。
+  // 足先が地面に付いたまま体だけが傾く・沈む・前へ跳ぶ。すべての関節は毎フレーム代入し直すので、死亡の姿勢から復活しても元に戻る。
+  // 向きの約束: ローカル -Z が前。体の pitch が正のとき鼻先が上がる。顎の open が正のとき開く。
+  // 動きの一覧:
+  //  待機: 呼吸・ときどき首を巡らせる・触角のそよぎ・前脚をときどき持ち上げて地面をつつく・腺の脈
+  //  歩行: 三脚歩行(左前・右中・左後ろ と 右前・左中・右後ろ を交互に踏む)・体の上下と左右の揺れ・触角が後ろへ寝る
+  //  噛みつき: 予備動作の0.12秒で後ろへ引いて鼻先を上げ、前脚2本を振り上げて顎を大きく開き、目と腺が強く光る
+  //           → 飛び出して顎を閉じる(体が前へ跳ぶ・前脚が突き出る) → 戻る
+  //  被弾: のけぞり(後ろへ押され、鼻先が上がり、顎が開き、光が揺れる)
+  //  死亡: updateRogueCrawlerDeath(跳ねてひっくり返り、脚を内へ丸めて震え、光が消える)
+  const ROGUE_CRAWLER_PIVOT_Y=.62,ROGUE_CRAWLER_DEATH_HOLD=.7;
+  // 体の姿勢: (ox,oy,oz) だけ平行移動し、重心まわりに pitch(X軸)→roll(Z軸)で傾ける。three.js の Euler XYZ(行列は Rx·Rz)に合わせる。
+  function rogueCrawlerApplyBody(rig,ox,oy,oz,pitch,roll){
+    const Cy=ROGUE_CRAWLER_PIVOT_Y,sr=Math.sin(roll),cr=Math.cos(roll),sp=Math.sin(pitch),cp=Math.cos(pitch);
+    rig.body.rotation.set(pitch,0,roll);
+    rig.body.position.set(ox+Cy*sr,oy+Cy-Cy*cr*cp,oz-Cy*cr*sp);   // 重心 c を動かさないための補正: c - R·c + 平行移動
+    rig.pose={ox,oy,oz,pitch,roll};
+  }
+  // 体の局所座標の目標点(tx,ty,tz)へ足先を置く2関節の逆運動学。股関節の向き(yaw)で水平方向を合わせ、
+  // その平面(外向きが x・上が y)で 腿L1→脛L2 を解く。膝は上へ折る。届かないときは届く限界まで伸ばす。
+  function rogueCrawlerSetLeg(leg,tx,ty,tz){
+    const L1=ROGUE_CRAWLER_LEG.L1,L2=ROGUE_CRAWLER_LEG.L2;
+    const dx=tx-leg.hip[0],dz=tz-leg.hip[2],r=Math.hypot(dx,dz),h=ty-leg.hip[1];
+    leg.yaw.rotation.y=Math.atan2(-dz,dx);
+    const d=Math.max(Math.abs(L1-L2)+.01,Math.min(L1+L2-.01,Math.hypot(r,h)));
+    const base=Math.atan2(h,r);
+    const A=Math.acos(Math.max(-1,Math.min(1,(L1*L1+d*d-L2*L2)/(2*L1*d))));
+    const alpha=base+A,kx=L1*Math.cos(alpha),ky=L1*Math.sin(alpha);
+    const beta=Math.atan2(d*Math.sin(base)-ky,d*Math.cos(base)-kx);
+    leg.upper.rotation.z=alpha;leg.lower.rotation.z=beta-alpha;
+  }
+  // 地面系(体の原点の真下を基準にした点)の足先 (gx,gy,gz) を、現在の体の姿勢の逆変換で局所座標へ戻して置く。
+  function rogueCrawlerPlant(rig,leg,gx,gy,gz){
+    const {ox,oy,oz,pitch,roll}=rig.pose,Cy=ROGUE_CRAWLER_PIVOT_Y;
+    const x=gx-ox,y=gy-oy-Cy,z=gz-oz;
+    const cp=Math.cos(pitch),sp=Math.sin(pitch),cr=Math.cos(roll),sr=Math.sin(roll);
+    const y1=y*cp+z*sp,z1=-y*sp+z*cp;       // Rx(-pitch)
+    const x2=x*cr+y1*sr,y2=-x*sr+y1*cr;     // Rz(-roll)
+    rogueCrawlerSetLeg(leg,x2,y2+Cy,z1);
+  }
+  function updateRogueCrawlerVisual(e,dt,rig){
+    const step=Math.max(0,Math.min(.08,dt||0));
+    if(rig.phase!==e.phase){rig.phase=e.phase;rig.phaseTime=0;}
+    rig.phaseTime+=step;
+    const pt=rig.phaseTime,t=performance.now()*.001,seed=(e.rogueId||'').length;
+    const lag=Math.hypot((e.targetX||0)-e.mesh.position.x,(e.targetZ||0)-e.mesh.position.z);
+    const moving=Math.max(0,Math.min(1,(lag-.008)*5.2));
+    rig.gaitPhase+=(dt||0)*(2+moving*15);
+    const smooth=q=>q*q*(3-2*q);
+    const windup=e.phase==='windup'?Math.min(1,pt/.12):0;
+    const strike=e.phase==='recover'?(pt<.06?pt/.06:Math.max(0,1-(pt-.06)/.16)):0;   // 飛び出して戻る
+    const impact=Math.max(0,Math.min(1,(e.flash||0)/.22));
+    const gait=Math.sin(rig.gaitPhase),idle=(1-moving)*(e.phase==='idle'?1:0);
+    // 体
+    const pitch=windup*.30-strike*.20+impact*.28+Math.sin(t*1.7+seed)*.01+Math.sin(rig.gaitPhase*2)*.018*moving;
+    const roll=gait*.035*moving+impact*.05;
+    rogueCrawlerApplyBody(rig,gait*.015*moving,
+      Math.sin(t*1.8+seed)*.008+Math.abs(Math.sin(rig.gaitPhase))*.03*moving-windup*.03+strike*.05,
+      windup*.12-strike*.38+impact*.16,pitch,roll);
+    // 足先: 立っている足は地面に付いたまま。歩行では 踏む(後ろへ送る)→持ち上げて前へ運ぶ を繰り返す。
+    const amp=.26*Math.min(1,moving*2.2);
+    for(const leg of rig.legs){
+      const u=((rig.gaitPhase+leg.phase)/(Math.PI*2))%1,uu=u<0?u+1:u;
+      let off,lift=0;
+      if(uu<.5)off=-1+2*(uu/.5);
+      else{const q=(uu-.5)/.5;off=1-2*smooth(q);lift=Math.sin(Math.PI*q)*.20*Math.min(1,moving*2.2);}
+      let gx=leg.rest[0]*(1+lift*.10+impact*.08),gy=lift,gz=leg.rest[1]+off*amp;
+      if(leg.row===0){
+        // 前脚: つつく(待機)・振り上げる(予備動作)・突き出す(噛みつき)・はね上がる(被弾)
+        gy+=Math.max(0,Math.sin(t*.7+seed*2+leg.phase)-.9)/.1*.14*idle+windup*.42+strike*.12+impact*.10;
+        gz+=-strike*.20-windup*.05;gx*=1+windup*.12;
+      }else gz+=-strike*.27;   // 中・後ろ脚は跳ぶ体に引かれて前へ
+      rogueCrawlerPlant(rig,leg,gx,gy,gz);
+    }
+    // 頭・大顎・触角
+    rig.head.rotation.set(-pitch*.6+windup*.10-strike*.10,Math.sin(t*.5+seed*1.3)*.25*idle+Math.sin(t*1.3+seed)*.03,0);
+    let open;
+    if(e.phase==='recover')open=pt<.05?.9-1.02*(pt/.05):-.12+.42*smooth(Math.min(1,(pt-.05)/.25));   // 噛み閉じて、ゆっくり開き直す
+    else open=.30+windup*.60+Math.sin(t*2.1+seed)*.03*idle;
+    open+=impact*.35;
+    for(const j of rig.jaws)j.pivot.rotation.set(-.25,-j.side*open,0);
+    rig.antennae.forEach((a,i)=>a.pivot.rotation.set(-1+Math.sin(t*2.3+seed+i*1.7)*.12+moving*.15+strike*.5-windup*.2,0,-a.side*(.35+Math.sin(t*1.7+seed+i)*.08)));
+    // 光: 目と腺は予備動作で強く光り、被弾で揺れる
+    rig.glowMat.emissiveIntensity=1.2+Math.sin(t*3+seed)*.2+windup*1.4+impact*.8;
+    const es=1+windup*.3;
+    for(const eye of rig.eyes)eye.mesh.scale.set(eye.base[0]*es,eye.base[1]*es,eye.base[2]*es);
+    const gs=1+Math.sin(t*3+seed)*.08+windup*.2;
+    rig.gland.scale.set(gs,gs,1.3*gs);
+  }
+  // 死亡の姿勢。e.dieT(秒)で進む: 跳ねてひっくり返る(0〜40%) → 脚を腹の下へ丸めて震える(20〜70%)。光は消えていく。
+  // 縮み始めは呼び出し側(ROGUE_CRAWLER_DEATH_HOLD のあと)。ひっくり返ると殻の背が地面に当たる高さまで体を下げる。
+  function updateRogueCrawlerDeath(e){
+    const rig=e&&e.visualRig;if(!rig||!rig.crawler)return;
+    const clamp01=x=>Math.max(0,Math.min(1,x)),ease=x=>x*x*(3-2*x);
+    const dieT=e.dieT||0,p=clamp01(dieT/ROGUE_CRAWLER_DEATH_HOLD);
+    const fq=clamp01(p/.4),flip=ease(fq),curl=ease(clamp01((p-.2)/.5)),shake=Math.sin(dieT*38)*.05*(1-curl);
+    rogueCrawlerApplyBody(rig,0,Math.sin(fq*Math.PI)*.40-.13*flip,.15*flip,Math.sin(clamp01(p/.2)*Math.PI)*.30,Math.PI*flip);
+    for(const leg of rig.legs){
+      // 局所座標の目標: 立ち姿の足先 → 腹の下(殻の下面より下)へ丸める。ひっくり返る間は脚をばたつかせる。
+      const cx=leg.side*(leg.row===1?.42:.32),cz=leg.hip[2]*.55;
+      const fl=Math.sin(dieT*22+leg.phase)*.08*(1-curl)*flip;
+      rogueCrawlerSetLeg(leg,leg.rest[0]+(cx-leg.rest[0])*curl+fl,.26*curl+Math.abs(fl)*.5,leg.rest[1]+(cz-leg.rest[1])*curl);
+    }
+    rig.head.rotation.set(.3*flip,0,shake);
+    for(const j of rig.jaws)j.pivot.rotation.set(-.25,-j.side*(.7+Math.sin(dieT*30)*.1*(1-curl)),0);
+    rig.antennae.forEach(a=>a.pivot.rotation.set(-1+.7*flip,0,-a.side*(.35+.4*flip)));
+    rig.glowMat.emissiveIntensity=Math.max(0,1.2*(1-p*1.5));
+    const es=Math.max(.2,1-p*.8);
+    for(const eye of rig.eyes)eye.mesh.scale.set(eye.base[0]*es,eye.base[1]*es,eye.base[2]*es);
+    rig.gland.scale.set(1,1,1.3);
+  }
   // 石の番兵の表示アニメーション。AI・攻撃判定・同期はサーバー側で、ここは見た目だけを動かす。
   // 動きの一覧:
   //  待機: 呼吸・ゆっくり首を巡らせる・ルーンの脈
@@ -3149,6 +3330,7 @@ window.startGame = function(NETINIT){
   function updateRogueEnemyVisual(e,dt){
     const rig=e&&e.visualRig;
     if(rig&&rig.golem){updateRogueGolemVisual(e,dt,rig);return;}
+    if(rig&&rig.crawler){updateRogueCrawlerVisual(e,dt,rig);return;}
     if(!rig||!rig.humanoid)return;
     const step=Math.max(0,Math.min(.08,dt||0));
     if(rig.phase!==e.phase){
@@ -3447,6 +3629,12 @@ window.startGame = function(NETINIT){
           updateRogueShadeDeath(e);
           e.mesh.scale.setScalar(e.dieT<ROGUE_SHADE_DEATH_HOLD?1:Math.max(.01,1-(e.dieT-ROGUE_SHADE_DEATH_HOLD)*3.3));
           if(e.dieT>ROGUE_SHADE_DEATH_HOLD+.3&&e.mesh.parent){e.mesh.parent.remove(e.mesh);e.dying=false;}
+          continue;
+        }
+        if(e.visualRig&&e.visualRig.crawler){   // クロウラー: ひっくり返って脚を丸め、光が消えてから縮んで消える
+          updateRogueCrawlerDeath(e);
+          e.mesh.scale.setScalar(e.dieT<ROGUE_CRAWLER_DEATH_HOLD?1:Math.max(.01,1-(e.dieT-ROGUE_CRAWLER_DEATH_HOLD)*3.3));
+          if(e.dieT>ROGUE_CRAWLER_DEATH_HOLD+.3&&e.mesh.parent){e.mesh.parent.remove(e.mesh);e.dying=false;}
           continue;
         }
         e.mesh.scale.setScalar(Math.max(.01,1-e.dieT*1.9));
@@ -10296,8 +10484,8 @@ window.startGame = function(NETINIT){
           updateNetInfo();
           if (serverSessionChanged) {
             showToast(interruptedByFreeRestart
-              ? '無料プランのサーバーが再起動しました。探索は中断扱いとなり、携行装備・未精算の欠片・遺品袋は失われました。保管庫と精算済み欠片は残っています。'
-              : '無料プランのサーバーが再起動しました。共有ワールドの建築・採集・宝箱・敵の状態は初期化されました。', 'セッション再開');
+              ? 'サーバーが再起動しました。探索は中断扱いとなり、携行装備・未精算の欠片・遺品袋は失われました。保管庫と精算済み欠片は残っています。'
+              : 'サーバーが再起動しました。共有ワールドの建築・採集・宝箱・敵の状態は初期化されました。', 'セッション再開');
           } else showToast('再接続しました', '接続');
           break;
         }
@@ -10822,7 +11010,7 @@ window.startGame = function(NETINIT){
     if (initialRunWasInProgress) {
       showToast('前回の探索は中断扱いになりました。携行装備と未精算の欠片は失われました。保管庫と精算済み欠片は残っています。', '探索中断');
     } else if (initialServerSessionChanged) {
-      showToast('無料プランのサーバーが再起動しました。共有ワールドの建築・採集・宝箱・敵の状態は初期化されました。', 'セッション再開');
+      showToast('サーバーが再起動しました。共有ワールドの建築・採集・宝箱・敵の状態は初期化されました。', 'セッション再開');
     }
   }
   setInterval(saveProgress, 8000);
@@ -10834,7 +11022,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=70.19-stone-sentinel"></script>
+<script src="shared.js?v=70.21-crawler-model"></script>
 <script src="boot.js"></script>
 </body>
 </html>

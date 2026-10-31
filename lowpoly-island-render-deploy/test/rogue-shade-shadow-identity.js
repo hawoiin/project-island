@@ -5,7 +5,7 @@ const path=require('path');
 const html=fs.readFileSync(path.join(__dirname,'../public/index.html'),'utf8');
 // シェイドの原案は「暗い遺跡に潜む影の住人」。v70.17 でぼろの外套をまとった亡霊の姿にした。
 // この見た目の芯が崩れないこと、狼男・獣・ロボットへ寄る特徴が復活しないことを検査する。
-assert.match(html,/>v70\.19<\/div>/);
+assert.match(html,/>v70\.21<\/div>/);
 // 芯: フード・外套・長い裾・淡い仮面と角・肩の結晶・胸の核
 for(const name of ['shadeTorso','shadeMantle','shadeRobe','shadeHood'])assert.match(html,new RegExp(name+':rogueRingLoftGeometry'),name+' がない');
 assert.match(html,/shadeMask:new THREE\.CylinderGeometry/,'前面が平らな仮面の板');

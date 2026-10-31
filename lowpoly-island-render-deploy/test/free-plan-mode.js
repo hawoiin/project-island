@@ -111,11 +111,14 @@ check('再読込前の探索状態をRogueProgression.load()より先に取得�
   assert.deepStrictEqual(loaded.stash, { weaponBonus: 1, armorBonus: 2 });
   assert.strictEqual(loaded.shards, 31);
 });
-check('Freeモードの保存制約はタイトル画面・設定・ダンジョン入場で説明される', () => {
-  assert.match(html, /id="freePlanNotice" hidden/);
-  assert.match(html, /id="freePlanSaveNotice" hidden/);
-  assert.match(html, /id="freePlanRogueNotice" hidden/);
-  assert.match(html, /大切な建築は設定からJSONを書き出して保管してください/);
-  assert.match(html, /共有ワールドの復元には管理者認証が必要です/);
+check('Render Freeの説明文はゲーム内(タイトル画面・設定・ダンジョン入場)に表示しない', () => {
+  for (const id of ['freePlanNotice', 'freePlanSaveNotice', 'freePlanRogueNotice']) assert.ok(!html.includes(id), id + ' が残っている');
+  assert.ok(!/Render Free/.test(html.replace(/\/\/[^\n]*/g, '')), 'ゲーム内の文言にRender Freeが残っている');
+  assert.ok(!html.includes('無料プランのサーバー'), '再起動の通知に無料プランの語が残っている');
+});
+check('サーバー再起動の検知と通知(世界の初期化・探索の中断)は維持される', () => {
+  assert.match(html, /FREE_PLAN_SESSION_MODE/);
+  assert.match(html, /サーバーが再起動しました。共有ワールドの建築・採集・宝箱・敵の状態は初期化されました。/);
+  assert.match(html, /サーバーが再起動しました。探索は中断扱いとなり/);
 });
 if (!process.exitCode) console.log('Free plan mode checks passed.');
