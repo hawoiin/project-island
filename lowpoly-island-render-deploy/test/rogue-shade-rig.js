@@ -22,7 +22,7 @@ const ROGUE_GEOMETRIES={${slice('    shadeTorso:rogueRingLoftGeometry','  };\n  
 const ROGUE_ENEMY_MATS={${slice('    shade:new THREE.MeshStandardMaterial({color:0x2a2442','    crawler:new THREE.MeshStandardMaterial').replace(/,\s*$/,'')}};
 function build(){const g=new THREE.Group();let visualRig=null;{${slice('      const M=ROGUE_ENEMY_MATS,G=ROGUE_GEOMETRIES;',"    }else{\n      const body=new THREE.Mesh(boss?")}}return visualRig;}
 ${slice('  function updateRogueEnemyVisual(e,dt){','  function makeRogueChest')}
-return {ROGUE_GEOMETRIES,ROGUE_ENEMY_MATS,build,updateRogueEnemyVisual};`;
+return {ROGUE_GEOMETRIES,ROGUE_ENEMY_MATS,build,updateRogueEnemyVisual,updateRogueShadeDeath,ROGUE_SHADE_DEATH_HOLD};`;
 const api=new Function(code)();
 function check(name,fn){try{fn();console.log('PASS '+name);}catch(e){console.error('FAIL '+name+': '+e.message);process.exitCode=1;}}
 
@@ -33,7 +33,8 @@ function trace(nodes,tip){
   let y=rig.pelvis.position.y,z=0,ang=0;
   for(const n of nodes){const [dy,dz]=rot(n.position.y,n.position.z,ang);y+=dy;z+=dz;ang+=n.rotation.x;}
   const [ty,tz]=rot(tip[0],tip[1],ang);
-  return {y:(y+ty+rig.body.position.y)*rig.body.scale.x,z:(z+tz)*rig.body.scale.x};
+  // body の位置は親(敵の原点)側の単位、骨盤より下の部品は body の縮尺(1.18)の中にある。
+  return {y:(y+ty)*rig.body.scale.x+rig.body.position.y,z:(z+tz)*rig.body.scale.x+rig.body.position.z};
 }
 const footBottom=l=>trace([l.hip,l.knee,l.foot],[-.07,0]).y;
 const clawTip=a=>trace([rig.torso,a.shoulder,a.elbow,a.wrist],[-.51,0]);   // 手首から爪の先まで(掌 .14 + 爪 .40 - 埋め込み)
@@ -63,17 +64,17 @@ check('胸を張って少し前へ屈む: 胴が前傾し、頭は高い位置�
   for(const a of rig.arms){
     const h=clawTip(a);
     assert.ok(h.y>.1&&h.y<1.0,'爪先の高さが不自然: '+h.y.toFixed(2));
-    assert.ok(Math.abs(a.shoulder.rotation.z)>.2,'腕が裾から離れていない(爪が裾に埋もれる)');
+    assert.ok(Math.abs(a.shoulder.rotation.z)>.08,'腕が裾から離れていない(爪が裾に埋もれる)');
   }
 });
 check('裾は地面すれすれまで垂れ、縁のぼろ布は床を突き抜けない',()=>{
-  const robeBottom=(rig.pelvis.position.y+rig.robe.position.y-.86+rig.body.position.y)*rig.body.scale.x;
+  const robeBottom=(rig.pelvis.position.y+rig.robe.position.y-.86)*rig.body.scale.x+rig.body.position.y;
   assert.ok(robeBottom>.05&&robeBottom<.3,'裾の高さが不自然: '+robeBottom.toFixed(3));
   const hem=rig.cloth.filter(c=>c.kind==='hem');
   assert.strictEqual(hem.length,7);
   for(const c of hem){
     const len=-c.pivot.children[0].position.y*2;
-    const tip=(rig.pelvis.position.y+rig.robe.position.y+c.pivot.position.y-len+rig.body.position.y)*rig.body.scale.x;
+    const tip=(rig.pelvis.position.y+rig.robe.position.y+c.pivot.position.y-len)*rig.body.scale.x+rig.body.position.y;
     assert.ok(tip>=-.01,'ぼろ布が床を突き抜ける: '+tip.toFixed(3));
   }
   assert.strictEqual(rig.cloth.filter(c=>c.kind==='cape').length,3,'背中のマントは3枚');
@@ -114,16 +115,70 @@ check('予備動作で腕を引き、顎を開き、口の奥・目・胸の核�
   assert.ok(rig.mouth.scale.y<.2,'待機中に口の奥が光っている');
   e.phase='windup';
   for(let i=0;i<12;i++){global.performance.now=()=>i*40;api.updateRogueEnemyVisual(e,.04);}
-  const back=rig.arms[0].shoulder.rotation.x;
-  assert.ok(back<rig.arms[0].baseS-.8,'腕が後ろへ引かれていない');
+  const sa=rig.arms[rig.swipe],back=sa.shoulder.rotation.x;
+  assert.ok(back<sa.baseS-.8,'腕が後ろへ引かれていない');
   assert.ok(rig.jaw.rotation.x<-.5,'顎が開いていない（開くのは負の回転）');
   assert.ok(rig.mouth.scale.y>.5,'顎が開いても口の奥が光らない');
   assert.ok(rig.core.scale.x>idleCore*1.3,'胸の核が強く光らない');
   assert.ok(rig.eyes[0].scale.y>idleEye*1.5,'目が太くならない');
   assert.ok(rig.torso.rotation.x>rig.baseLean+.2,'胴が反っていない');
   e.phase='recover';api.updateRogueEnemyVisual(e,0);
-  assert.ok(rig.arms[0].shoulder.rotation.x>rig.arms[0].baseS+.8,'腕が前へ振り抜かれていない');
+  assert.ok(sa.shoulder.rotation.x>sa.baseS+.8,'腕が前へ振り抜かれていない');
   assert.ok(rig.torso.rotation.x<rig.baseLean-.2,'胴が前へ倒れていない');
   assert.ok(rig.head.rotation.x<rig.baseHeadX,'噛みつきで頭が下がっていない');
+});
+
+const tick=(ph,n,flash)=>{e.phase=ph;e.flash=flash||0;for(let i=0;i<n;i++){global.performance.now=()=>i*40;api.updateRogueEnemyVisual(e,.04);}};
+check('攻撃のたびに振る腕が左右交代し、振る腕は引きも薙ぎも大きく、胴を逆向きにひねる',()=>{
+  e.targetX=0;tick('idle',6);
+  tick('windup',12);const first=rig.swipe,a=rig.arms[first],b=rig.arms[1-first];
+  assert.ok(a.shoulder.rotation.x<b.shoulder.rotation.x-.4,'振る腕のほうが大きく引かれていない');
+  const twistWind=rig.torso.rotation.y;
+  assert.ok(Math.abs(twistWind)>.2,'胴がひねられていない');
+  e.phase='recover';rig.phaseTime=0;api.updateRogueEnemyVisual(e,0);
+  assert.ok(rig.torso.rotation.y*twistWind<0,'薙ぐとき胴が逆へ戻らない');
+  tick('idle',4);tick('windup',12);
+  assert.notStrictEqual(rig.swipe,first,'次の攻撃で腕が交代しない');
+});
+check('振り抜いたあとに揺り戻しがあり、やがて収まる',()=>{
+  e.phase='recover';rig.phaseTime=0;api.updateRogueEnemyVisual(e,0);
+  e.phase='idle';api.updateRogueEnemyVisual(e,.04);
+  assert.strictEqual(rig.settleT<1,true,'揺り戻しが始まらない');
+  for(let i=0;i<40;i++){global.performance.now=()=>i*40;api.updateRogueEnemyVisual(e,.04);}
+  assert.ok(rig.settleT>1,'揺り戻しが収まらない');
+});
+check('被弾でのけぞり、裾が煽られ、収まると元へ戻る',()=>{
+  e.targetX=0;tick('idle',20);const z0=rig.body.position.z,t0=rig.torso.rotation.x;
+  tick('idle',1,.18);
+  assert.ok(rig.body.position.z>z0+.05,'後ろへ押されない');
+  assert.ok(rig.torso.rotation.x>t0+.15,'胴がのけぞらない');
+  tick('idle',20,0);
+  assert.ok(Math.abs(rig.body.position.z-z0)<.03,'被弾の姿勢が戻らない');
+});
+check('死亡: のけぞり→膝をつく→突っ伏す。足は床に付いたまま、裾は床にたまり、光が消える',()=>{
+  const H=api.ROGUE_SHADE_DEATH_HOLD;let prevY=9;
+  const at=p=>{e.dieT=p*H;api.updateRogueShadeDeath(e);};
+  at(.15);assert.ok(rig.arms[0].shoulder.rotation.x<rig.arms[0].baseS-.8,'のけぞりで腕が跳ね上がらない');
+  assert.ok(rig.torso.rotation.x>rig.baseLean+.3,'のけぞらない');
+  for(let p=0;p<=1.0001;p+=.05){
+    at(p);
+    for(const l of rig.legs){const y=footBottom(l);assert.ok(Math.abs(y)<.08,`p=${p.toFixed(2)} 足が床から離れる/潜る: ${y.toFixed(3)}`);}
+    const hem=(rig.pelvis.position.y+rig.robe.position.y-.86*rig.robe.scale.y)*rig.body.scale.x+rig.body.position.y;
+    assert.ok(hem>-.03&&hem<.35,`p=${p.toFixed(2)} 裾の高さが不自然: ${hem.toFixed(3)}`);
+    assert.ok(rig.body.position.y<=prevY+1e-9,'腰が上がっている');prevY=rig.body.position.y;
+    for(const o of [rig.torso,rig.head,rig.robe,rig.jaw])for(const k of ['x','y','z'])assert.ok(Number.isFinite(o.rotation[k]));
+  }
+  assert.ok(rig.body.position.y<-.4,'膝をついていない');
+  assert.ok(rig.torso.rotation.x<rig.baseLean-.5,'突っ伏していない');
+  assert.ok(rig.core.scale.x<.3&&rig.eyes[0].scale.x<.1,'光が消えていない');
+  assert.ok(rig.robe.scale.y<.6,'裾が縮まない');
+});
+check('死亡の姿勢から復活すると、通常の姿勢へ完全に戻る',()=>{
+  e.dieT=.8;api.updateRogueShadeDeath(e);
+  e.targetX=0;tick('idle',20);
+  assert.strictEqual(rig.robe.scale.y,1);
+  assert.ok(Math.abs(rig.body.position.y)<.05,'腰が戻らない');
+  for(const l of rig.legs)assert.ok(Math.abs(footBottom(l))<.03,'足が戻らない');
+  assert.ok(rig.core.scale.x>.8&&rig.eyes[0].scale.x>.8,'光が戻らない');
 });
 if(!process.exitCode)console.log('Rogue shade rig checks passed.');

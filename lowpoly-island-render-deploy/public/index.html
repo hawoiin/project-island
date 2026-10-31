@@ -2922,8 +2922,8 @@ window.startGame = function(NETINIT){
       // 腕: 肩の回転は胴の前傾を打ち消して下へ垂らす。手首は世界座標でほぼ垂直になるよう基準を取る。
       const arms=[];
       for(const side of [-1,1]){
-        const baseS=.50,baseE=-.55,baseW=-(baseLean+baseS+baseE);
-        const shoulder=new THREE.Group();shoulder.position.set(side*.35,.50,.04);shoulder.rotation.set(baseS,0,-side*.30);torso.add(shoulder);
+        const baseS=.80,baseE=.25,baseW=-(baseLean+baseS+baseE);
+        const shoulder=new THREE.Group();shoulder.position.set(side*.40,.50,.04);shoulder.rotation.set(baseS,0,-side*.12);torso.add(shoulder);
         part(shoulder,G.shadeUpperArm,M.shadeLimb,0,-.21,0,{cast:true});
         const elbow=new THREE.Group();elbow.position.set(0,-.42,0);elbow.rotation.x=baseE;shoulder.add(elbow);
         part(elbow,G.shadeForearm,M.shadeLimb,0,-.25,0,{cast:true});
@@ -2967,7 +2967,7 @@ window.startGame = function(NETINIT){
         cloth.push({pivot,baseX:pivot.rotation.x,phase:ph,kind:'cape',trail:.38});
       });
 
-      visualRig={humanoid:true,body,pelvis,torso,head,jaw,arms,legs,gaitPhase:Math.random()*Math.PI*2,phase:'idle',phaseTime:0,headBase,baseHeadX,baseLean,robe,cloth,core,eyes,mouth};
+      visualRig={humanoid:true,body,pelvis,torso,head,jaw,arms,legs,gaitPhase:Math.random()*Math.PI*2,phase:'idle',phaseTime:0,headBase,baseHeadX,baseLean,robe,cloth,core,eyes,mouth,swipe:0,settleT:9};
     }else{
       const body=new THREE.Mesh(boss?ROGUE_GEOMETRIES.bossBody:ROGUE_GEOMETRIES.body,mat); body.position.y=boss?1.65:1.0; body.scale.set(1,boss?1.35:1.12,.9); body.castShadow=true; g.add(body);
       const head=new THREE.Mesh(boss?ROGUE_GEOMETRIES.bossHead:ROGUE_GEOMETRIES.head,mat); head.position.set(0,boss?2.85:1.85,-.18); g.add(head);
@@ -2995,48 +2995,66 @@ window.startGame = function(NETINIT){
     return {kind,x,z,targetX:x,targetZ:z,targetYaw:0,hp,maxHp:hp,stage,boss:!!boss,optional:!!optional,rogueId,mesh:g,warningMesh,visualRig,phase:'idle',attackMode:'',aimX:x,aimZ:z,attackRadius:1.5,cooldown:1+Math.random(),dying:false,dieT:0,flash:0};
   }
   // シェイド(影の住人)の表示アニメーション。AI・攻撃判定・同期はサーバー側で、ここは見た目だけを動かす。
-  // 関節の回転は基準姿勢(base*)に加算し、設計した姿勢を毎フレーム消さない。
+  // 関節の回転は基準姿勢(base*)に加算し、設計した姿勢を毎フレーム消さない。毎フレームすべての関節を代入し直すので、
+  // 死亡の姿勢から復活しても元に戻る。
   // rotation.x が正のとき: 脚・腕は前へ振れ、胴は後ろへ反り、頭は鼻先が上がる。顎は負で開く。裾と布は正で前へ振れる。
-  // 攻撃の予告(windup)は、腕を引く・顎を開く・目と胸の核が強く光る・裾が引かれる、で読めるようにする。
+  // 動きの一覧:
+  //  待機: 呼吸・ときどき首を巡らせて周囲を見る・爪をそっと握り直す・胸の核の脈
+  //  歩行: 脚の振りと膝の畳み・腕の振り・裾とマントのたなびき
+  //  攻撃: 予備動作(振る側の腕を大きく引いて胴をひねる・顎を開く・目と胸の核が強く光る) → 振り抜き(胴を戻して逆側へ薙ぐ) → 揺り戻し。左右の腕を交互に使う
+  //  被弾: のけぞり(胴・頭・腕が跳ねる)と裾の煽り
+  //  死亡: updateRogueShadeDeath(のけぞる → 膝をつく → 前へ突っ伏す。光が消え、裾は床にたまる)
   function updateRogueEnemyVisual(e,dt){
     const rig=e&&e.visualRig;if(!rig||!rig.humanoid)return;
-    if(rig.phase!==e.phase){rig.phase=e.phase;rig.phaseTime=0;}
-    rig.phaseTime+=Math.max(0,Math.min(.08,dt||0));
+    const step=Math.max(0,Math.min(.08,dt||0));
+    if(rig.phase!==e.phase){
+      if(e.phase==='windup')rig.swipe=1-rig.swipe;                 // 振る腕を左右交互にする
+      if(rig.phase==='recover'&&e.phase==='idle')rig.settleT=0;    // 振り抜いたあとの揺り戻しを始める
+      rig.phase=e.phase;rig.phaseTime=0;
+    }
+    rig.phaseTime+=step;rig.settleT+=step;
     const t=performance.now()*.001,seed=(e.rogueId||'').length;
     const lag=Math.hypot((e.targetX||0)-e.mesh.position.x,(e.targetZ||0)-e.mesh.position.z);
     const moving=Math.max(0,Math.min(1,(lag-.008)*5.2));
     rig.gaitPhase+=(dt||0)*(2.8+moving*7.4);
-    const windup=e.phase==='windup'?Math.min(1,rig.phaseTime/.24):(e.phase==='charge'?1:0);   // 腕を引き、胴を反らせ、顎を開く
-    const lunge=e.phase==='recover'?Math.max(0,1-rig.phaseTime/.22):0;                        // 腕を振り抜き、頭を突き出す
+    const windup=e.phase==='windup'?Math.min(1,rig.phaseTime/.24):(e.phase==='charge'?1:0);   // 腕を引き、胴をひねり、顎を開く
+    const lunge=e.phase==='recover'?Math.max(0,1-rig.phaseTime/.22):0;                        // 腕を薙ぎ、頭を突き出す
     const impact=Math.max(0,Math.min(1,(e.flash||0)/.22));
+    const settle=rig.settleT<1?Math.exp(-rig.settleT*5)*Math.sin(rig.settleT*16):0;           // 振り抜いたあとの小さな揺り戻し
+    const glance=Math.max(0,Math.sin(t*.45+seed*1.7)-.55)/.45*(1-moving)*(1-windup);          // ときどき首を巡らせる
+    const glanceDir=Math.sin(t*.22+seed)>0?1:-1;
     const gait=Math.sin(rig.gaitPhase),hb=rig.headBase;
-    rig.body.position.y=.01+Math.abs(gait)*.035*moving+Math.sin(t*2+seed)*.008-windup*.03+lunge*.02;
-    rig.body.position.z=-lunge*.20+windup*.05;
-    rig.body.rotation.x=(e.phase==='charge'?-.08:0)+lunge*.06+impact*.03;
+    const swipeSide=rig.arms[rig.swipe].side;
+    rig.body.position.y=.01+Math.abs(gait)*.035*moving+Math.sin(t*2+seed)*.008-windup*.03+lunge*.02+settle*.015;
+    rig.body.position.z=-lunge*.20+windup*.05+impact*.10;
+    rig.body.rotation.x=(e.phase==='charge'?-.08:0)+lunge*.06+impact*.03+settle*.03;
     rig.body.rotation.z=.02*gait*moving+Math.sin(t*1.2)*.01+impact*.05;
     rig.pelvis.rotation.y=gait*.10*moving;
     rig.pelvis.rotation.z=-gait*.03*moving;
-    rig.torso.rotation.x=rig.baseLean+windup*.35-lunge*.30+Math.sin(t*1.6+seed)*.02+Math.sin(rig.gaitPhase*2)*.03*moving;
-    rig.torso.rotation.y=-gait*.16*moving+Math.sin(t*.7+seed)*.03;
+    rig.torso.rotation.x=rig.baseLean+windup*.35-lunge*.30+impact*.30+settle*.06+Math.sin(t*1.6+seed)*.02+Math.sin(rig.gaitPhase*2)*.03*moving;
+    rig.torso.rotation.y=-gait*.16*moving+Math.sin(t*.7+seed)*.03-swipeSide*(windup*.30-lunge*.45);   // 振る側の肩を引いてひねり、逆へ薙ぐ
     rig.torso.scale.y=1+Math.sin(t*1.7+seed)*.012;
+    rig.torso.scale.x=1;
     const leanDelta=rig.torso.rotation.x-rig.baseLean;
     rig.head.position.set(hb[0],hb[1],hb[2]);
-    rig.head.rotation.x=rig.baseHeadX-leanDelta*.7+Math.sin(t*1.9+seed)*.03*(1-moving)+windup*.25-lunge*.35-impact*.1;
-    rig.head.rotation.y=Math.sin(t*.66+seed)*(.04+.05*(1-moving))-rig.torso.rotation.y*.8;
-    rig.jaw.rotation.x=-(.05+windup*.85+lunge*.25+Math.max(0,Math.sin(t*1.3+seed))*.03);
-    for(const a of rig.arms){
+    rig.head.rotation.x=rig.baseHeadX-leanDelta*.7+Math.sin(t*1.9+seed)*.03*(1-moving)+windup*.25-lunge*.35+impact*.25;
+    rig.head.rotation.y=Math.sin(t*.66+seed)*(.04+.05*(1-moving))-rig.torso.rotation.y*.8+glance*glanceDir*.5;
+    rig.jaw.rotation.x=-(.05+windup*.85+lunge*.25+Math.max(0,Math.sin(t*1.3+seed))*.03+impact*.15);
+    for(let i=0;i<2;i++){
+      const a=rig.arms[i],swipe=i===rig.swipe,w=swipe?1:.4;   // 振らない腕は控えめに構える
       const ph=rig.gaitPhase+a.phase;
-      a.shoulder.rotation.x=a.baseS+Math.sin(ph)*.45*moving-windup*1.15+lunge*1.25+Math.sin(t*1.4+seed+a.phase)*.03;
-      a.shoulder.rotation.z=-a.side*(.30+windup*.18+impact*.05);
-      a.elbow.rotation.x=a.baseE-Math.max(0,Math.cos(ph))*.35*moving-windup*.5+lunge*.15;
+      a.shoulder.rotation.x=a.baseS+Math.sin(ph)*.45*moving-windup*1.15*w+lunge*1.25*w+impact*.35+Math.sin(t*1.4+seed+a.phase)*.03;
+      a.shoulder.rotation.z=-a.side*(.12+windup*.18*w+(swipe?windup*.30:0)+impact*.10)+(swipe?a.side*lunge*.55:0);   // 外へ引き、内へ薙ぐ
+      a.elbow.rotation.x=a.baseE-Math.max(0,Math.cos(ph))*.35*moving-windup*.5*w+lunge*.15*w-impact*.2;
       const dS=a.shoulder.rotation.x-a.baseS,dE=a.elbow.rotation.x-a.baseE;
-      a.wrist.rotation.x=a.baseW-(dS+dE+leanDelta)*.6;   // 手は完全には追従させず、ぶら下がって遅れて揺れる
+      const flex=Math.max(0,Math.sin(t*.8+a.phase+seed)-.8)/.2*.3*(1-moving)*(1-windup);   // 待機中、ときどき爪を握り直す
+      a.wrist.rotation.x=a.baseW-(dS+dE+leanDelta)*.6-flex;   // 手は完全には追従させず、ぶら下がって遅れて揺れる
     }
     for(const leg of rig.legs){
       const ph=rig.gaitPhase+leg.phase;
       const swing=Math.sin(ph)*.26*moving;   // 裾の中に収まる振り幅(大きく振ると腿が裾の前へ突き出る)
       const lift=Math.max(0,Math.cos(ph))*moving;   // 脚が前へ運ばれる間だけ膝を畳む
-      leg.hip.rotation.x=leg.baseHip+swing+windup*.10+lunge*.12;
+      leg.hip.rotation.x=leg.baseHip+swing+windup*.10+lunge*.12+impact*.08;
       leg.hip.rotation.z=leg.side*(.015*moving*Math.cos(ph)+impact*.03);
       leg.knee.rotation.x=leg.baseKnee-lift*.80-windup*.20;
       leg.foot.rotation.x=-(leg.hip.rotation.x+leg.knee.rotation.x)-lift*.20;
@@ -3044,16 +3062,58 @@ window.startGame = function(NETINIT){
     // 発光部: 目は予備動作で太く、口の奥は顎の開きに合わせて光り、胸の核は脈打つ。
     const open=Math.max(0,Math.min(1,(-rig.jaw.rotation.x-.08)/.8));
     rig.mouth.scale.y=Math.max(.001,open);
-    for(const eye of rig.eyes)eye.scale.set(1+windup*.3,1+windup*.9,1);
-    const pulse=1+Math.sin(t*2.4+seed)*.10+windup*.55+impact*.4;
+    for(const eye of rig.eyes)eye.scale.set(1+windup*.3+glance*.2,1+windup*.9+impact*.5+glance*.2,1);
+    const pulse=1+Math.sin(t*2.4+seed)*.10+windup*.55+impact*.4+glance*.25;
     rig.core.scale.set(pulse,1.5*pulse,.8*pulse);
-    // 裾: 外套と裾は歩くと後ろへ遅れて傾き、予備動作で前へ引き、振り抜きで前へ煽られる。縁のぼろ布はそれに加えて独立に揺れる。
-    rig.robe.rotation.x=-moving*.12+windup*.06-lunge*.10+Math.sin(t*1.5+seed)*.012;
+    // 裾: 外套と裾は歩くと後ろへ遅れて傾き、予備動作で前へ引き、振り抜きと被弾で前へ煽られる。縁のぼろ布はそれに加えて独立に揺れる。
+    rig.robe.scale.y=1;
+    rig.robe.rotation.x=-moving*.12+windup*.06-lunge*.10+impact*.12+settle*.04+Math.sin(t*1.5+seed)*.012;
     rig.robe.rotation.z=gait*.03*moving;
     for(const c of rig.cloth){
       const flutter=Math.sin(t*1.9+c.phase+seed)*.07+Math.sin(rig.gaitPhase*2+c.phase)*.10*moving;
-      c.pivot.rotation.x=c.baseX-moving*c.trail+flutter-windup*.10+lunge*.18;
+      c.pivot.rotation.x=c.baseX-moving*c.trail+flutter-windup*.10+lunge*.18+impact*.30;
     }
+  }
+  // 死亡の姿勢。e.dieT(秒)で進む: のけぞる(0〜30%) → 膝をつき崩れる(20〜80%) → 前へ突っ伏す(50〜100%)。
+  // 光(目・胸の核・口の奥)は消えていく。腰が下がった分だけ裾を縮め、裾の縁は床の高さのまま床にたまる。
+  // 膝の折り方は、腰を0.45m落としても足が床に付き続けるよう、腿の角から脛の角を解いて決める。縮み始めは呼び出し側(ROGUE_SHADE_DEATH_HOLD のあと)。
+  const ROGUE_SHADE_DEATH_HOLD=.8;
+  function updateRogueShadeDeath(e){
+    const rig=e&&e.visualRig;if(!rig||!rig.humanoid)return;
+    const p=Math.max(0,Math.min(1,(e.dieT||0)/ROGUE_SHADE_DEATH_HOLD));
+    const ease=x=>x*x*(3-2*x),clamp01=x=>Math.max(0,Math.min(1,x));
+    const recoil=Math.sin(clamp01(p/.3)*Math.PI);
+    const k=ease(clamp01((p-.2)/.6));
+    const slump=ease(clamp01((p-.5)/.5));
+    const fade=Math.max(0,1-p*1.5),hb=rig.headBase;
+    rig.body.position.y=.01-.45*1.18*k;
+    rig.body.position.z=recoil*.25-slump*.25;
+    rig.body.rotation.x=-slump*.35;rig.body.rotation.z=0;
+    rig.pelvis.rotation.y=0;rig.pelvis.rotation.z=0;
+    rig.torso.rotation.x=rig.baseLean+recoil*.7-slump*.75;rig.torso.rotation.y=0;rig.torso.scale.y=1;
+    rig.head.position.set(hb[0],hb[1],hb[2]);
+    rig.head.rotation.x=rig.baseHeadX+recoil*.4-slump*.3;rig.head.rotation.y=0;
+    rig.jaw.rotation.x=-(.05+recoil*.9+slump*.4);
+    for(const a of rig.arms){
+      a.shoulder.rotation.x=a.baseS-recoil*1.4+slump*.9;
+      a.shoulder.rotation.z=-a.side*(.12+recoil*.5);
+      a.elbow.rotation.x=a.baseE-recoil*.4;
+      a.wrist.rotation.x=a.baseW;
+    }
+    for(const leg of rig.legs){
+      // 腰が落ちた分だけ足が床に付くよう、腿の角から脛の角を解く(腿 .48・脛 .50 の2リンク)。
+      const reach=.48*Math.cos(leg.baseHip)+.50*Math.cos(leg.baseHip+leg.baseKnee)-.45*k;
+      const thigh=leg.baseHip+.70*k,shin=-Math.acos(Math.max(-1,Math.min(1,(reach-.48*Math.cos(thigh))/.50)));
+      leg.hip.rotation.x=thigh;leg.hip.rotation.z=0;
+      leg.knee.rotation.x=shin-thigh;
+      leg.foot.rotation.x=-(leg.hip.rotation.x+leg.knee.rotation.x);
+    }
+    rig.robe.scale.y=(.88-.45*k)/.88;rig.robe.rotation.x=recoil*.1;rig.robe.rotation.z=0;
+    for(const c of rig.cloth)c.pivot.rotation.x=c.baseX+recoil*.4+k*.3;
+    for(const eye of rig.eyes)eye.scale.set(Math.max(.02,fade),Math.max(.02,fade),1);
+    const s=Math.max(.05,fade*(1+recoil*.8));
+    rig.core.scale.set(s,1.5*s,.8*s);
+    rig.mouth.scale.y=Math.max(.001,recoil*.9*fade);
   }
   function makeRogueChest(x,z){
     const g=new THREE.Group();
@@ -3238,7 +3298,14 @@ window.startGame = function(NETINIT){
       if(e.hp<=0){
         if(e.warningMesh)e.warningMesh.visible=false;
         if(!e.dying)continue;
-        e.dieT+=dt;e.mesh.scale.setScalar(Math.max(.01,1-e.dieT*1.9));
+        e.dieT+=dt;
+        if(e.visualRig&&e.visualRig.humanoid){   // シェイド: 膝をついて崩れ、光が消えてから縮んで消える
+          updateRogueShadeDeath(e);
+          e.mesh.scale.setScalar(e.dieT<ROGUE_SHADE_DEATH_HOLD?1:Math.max(.01,1-(e.dieT-ROGUE_SHADE_DEATH_HOLD)*3.3));
+          if(e.dieT>ROGUE_SHADE_DEATH_HOLD+.3&&e.mesh.parent){e.mesh.parent.remove(e.mesh);e.dying=false;}
+          continue;
+        }
+        e.mesh.scale.setScalar(Math.max(.01,1-e.dieT*1.9));
         if(e.dieT>.55&&e.mesh.parent){e.mesh.parent.remove(e.mesh);e.dying=false;}
         continue;
       }

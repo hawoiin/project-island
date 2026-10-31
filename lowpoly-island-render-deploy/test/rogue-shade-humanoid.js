@@ -15,6 +15,6 @@ assert.match(html,/const arms=\[\];/);
 assert.match(html,/const legs=\[\];/);
 assert.match(html,/const wrist=new THREE\.Group\(\)/);
 assert.match(html,/const jaw=new THREE\.Group\(\)/);
-assert.match(html,/visualRig=\{humanoid:true,body,pelvis,torso,head,jaw,arms,legs,[^}]*robe,cloth,core,eyes,mouth\}/);
+assert.match(html,/visualRig=\{humanoid:true,body,pelvis,torso,head,jaw,arms,legs,[^}]*robe,cloth,core,eyes,mouth,swipe:0,settleT:9\}/);
 assert.doesNotMatch(html,/shadeBody|shadeUpperLeg|shadeMetatarsus|shadeTorso:new THREE\.BoxGeometry|shadeArmor|shadeFacePlate/);
 console.log('Rogue shade humanoid anatomy checks passed.');

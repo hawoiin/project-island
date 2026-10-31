@@ -31,6 +31,11 @@ check('裾・マント・発光(目・口の奥・胸の核)も予備動作と�
   assert.match(html,/rig\.core\.scale\.set\(pulse,/);
   assert.match(html,/for\(const eye of rig\.eyes\)eye\.scale\.set\(/);
 });
+check('死亡はシェイド専用の姿勢で崩れ、光が消えてから縮む(他の敵は従来どおり縮むだけ)',()=>{
+  assert.match(html,/function updateRogueShadeDeath\(e\)/);
+  assert.match(html,/if\(e\.visualRig&&e\.visualRig\.humanoid\)\{[^}]*updateRogueShadeDeath\(e\)/);
+  assert.match(html,/e\.mesh\.scale\.setScalar\(Math\.max\(\.01,1-e\.dieT\*1\.9\)\)/,'他の敵の死亡は従来どおり');
+});
 check('敵AI・攻撃タイミング・ダメージはサーバー処理を維持',()=>{
   assert.match(shared,/const ROGUE_ENEMY_PROFILES/);
   assert.match(shared,/state\.phase='windup'/);
