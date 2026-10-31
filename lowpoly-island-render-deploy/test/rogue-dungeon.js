@@ -16,7 +16,7 @@ check('カメラ距離と床クリップは大規模ダンジョンの深さに�
 check('屋外の灯台・海底洞窟のカメラ補正を別シーンの洞窟座標に適用しない',html.includes('if(inCaveIndex===-1){\n      const lhCam=pushCameraOutOfLighthouse')&&html.includes('cameraGoal=pushCameraIntoGrotto(lhCam.x,cy,lhCam.z)'));
 check('床高計算前にダンジョンの禁止エリアを解決する',html.includes('if(inCaveIndex===ROGUE_DUNGEON_INDEX) constrainRogueDungeonPosition(player.position);\n\n    // 簡易ジャンプ/重力'));
 check('歩行範囲は見える床の内側に縮め、カメラの床判定だけ適度に余裕を持つ',shared.includes('const rx=a.rx*.99-.45')&&shared.includes("a.width*(variant==='linear'?.5:.45)")&&html.includes('rogueFloorHeight(x,z,0.58)'));
-check('下り坂の通路は広間の床メッシュから切り欠かれる',shared.includes("{type:'corridor',ax:15,az:-90,bx:30,bz:-95,width:9.2,extendStart:0,extendEnd:5.2}")&&shared.includes("{type:'corridor',ax:0,az:-103,bx:0,bz:-121,width:10.8,extendStart:0,extendEnd:6.8}")&&shared.includes("{type:'corridor',ax:0,az:-152,bx:0,bz:-166,width:10.8,extendStart:0,extendEnd:4.0}")&&html.includes('rogueCorridorFloorSlot(h.ax,h.az,h.bx,h.bz')&&html.includes('const x=pt.x-cx,y=-(pt.z-cz)'));
+check('下り坂の通路は広間の床メッシュから切り欠かれる',shared.includes("{type:'corridor',ax:14,az:-93,bx:30,bz:-95,width:9.2,extendStart:0,extendEnd:5.2}")&&shared.includes("{type:'corridor',ax:0,az:-103,bx:0,bz:-121,width:10.8,extendStart:0,extendEnd:6.8}")&&shared.includes("{type:'corridor',ax:0,az:-152,bx:0,bz:-166,width:10.8,extendStart:0,extendEnd:4.0}")&&html.includes('rogueCorridorFloorSlot(h.ax,h.az,h.bx,h.bz')&&html.includes('const x=pt.x-cx,y=-(pt.z-cz)'));
 check('通路脇の岩のサイズを含めた配置ガードがある',html.includes('rogueRockOverlapsPassage(x,z,rockRx,rockRz,.55)')&&html.includes('seg.w/2+2.8+Math.random()*1.4')&&html.includes('const rubbleFloor=rogueInterpolatedFloor(seg.za,seg.zb,seg.yA,seg.yB,z)'));
 check('視覚上の石橋に床のない隙間が発生しない',html.includes('BoxGeometry(bridge.width,.28,1.98)'));
 check('移動境界と床は同じ歩行領域を参照し、封印門で進行を管理',html.includes('function isRogueWalkable')&&html.includes('function constrainRogueDungeonPosition')&&html.includes('function setRogueGateOpen'));
@@ -31,5 +31,5 @@ check('枝道の敵は任意で、倒さなくても本線の進行を止めな�
 check('枝道の敵はミニマップに残り、本線の残り数には含めない',html.includes('e.optional?1.25:1.7')&&html.includes('stage===rogueRun.stage&&!e.optional&&e.hp>0&&!e.dying'));
 check('死亡時は未精算の欠片と装備を失い、島へ帰還する',html.includes('leaveRogueDungeon(false,true)')&&html.includes('冒険失敗'));
 check('通常洞窟の半径13.5m制限は維持',/const CAVE_ROOM_R = 13\.5/.test(html)&&/const CAVE_ROOM_RADIUS = 13\.5/.test(shared));
-check('v70.12バージョン表示とキャッシュ更新が反映される',/<div id="versionLabel"[^>]*>v70\.12<\/div>/.test(html)&&html.includes('shared.js?v=70.12-ramp-collision'));
+check('v70.13バージョン表示とキャッシュ更新が反映される',/<div id="versionLabel"[^>]*>v70\.13<\/div>/.test(html)&&html.includes('shared.js?v=70.13-ramp-rebuild'));
 if(failures)process.exit(1);console.log('Rogue dungeon checks passed.');

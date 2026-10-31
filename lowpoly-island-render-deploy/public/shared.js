@@ -196,12 +196,12 @@
     {type:'segment', ax:0, az:-49, bx:0, bz:-63, width:10, yA:0, yB:0},
     {type:'ellipse', x:0, z:-83, rx:36, rz:25, floorY:0, floorHoles:[
       {type:'ellipse',x:0,z:-83,rx:35.5,rz:4.55},
-      {type:'corridor',ax:15,az:-90,bx:30,bz:-95,width:9.2,extendStart:0,extendEnd:5.2},
+      {type:'corridor',ax:14,az:-93,bx:30,bz:-95,width:9.2,extendStart:0,extendEnd:5.2},
       {type:'corridor',ax:0,az:-103,bx:0,bz:-121,width:10.8,extendStart:0,extendEnd:6.8}
     ]},
-    {type:'segment', ax:-14, az:-78, bx:-29, bz:-69, width:8.5, yA:0, yB:3.8},
+    {type:'segment', ax:-12, az:-74, bx:-29, bz:-69, width:8.5, yA:0, yB:3.8},
     {type:'ellipse', x:-42, z:-66, rx:15, rz:13, floorY:3.8},
-    {type:'segment', ax:15, az:-90, bx:30, bz:-95, width:8.5, yA:0, yB:-2.6},
+    {type:'segment', ax:14, az:-93, bx:30, bz:-95, width:8.5, yA:0, yB:-2.6},
     {type:'ellipse', x:44, z:-97, rx:16, rz:14, floorY:-2.6},
     {type:'segment', ax:0, az:-103, bx:0, bz:-121, width:10, yA:0, yB:-1.4},
     {type:'ellipse', x:0, z:-137, rx:27, rz:18, floorY:-1.4, floorHoles:[
@@ -281,6 +281,68 @@
     }
     return false;
   }
+  // ---- v70.13: 坂(床高が変わる通路)の形を1か所で定義する ----
+  // これまでは「歩ける幅」(width*0.45)・「見た目の幅」(広間の切り欠きの幅)・「側面の壁」(別の判定関数)がそれぞれ別々に決められ、
+  // 見えている坂の面の1〜2割が歩けなかったり、坂の端が裂け目の上に張り出したりしていた。
+  // ここでは坂ごとに矩形(始点→終点方向の長さ L、中心線からの横幅)を1つ決め、
+  // 歩行判定・床候補・側面の壁・描画(index.html の rogueRampBuildShape)のすべてがこの矩形を使う。
+  //   hvis  : 見た目の石畳の半幅(広間の床の切り欠きがあれば同じ幅まで広げる)
+  //   hwalk : 歩ける半幅 = hvis - 縁との余白(アバターの半径分)
+  //   hbody : 石の躯体(縁石を含む)の半幅 = hvis + 縁石の幅。この外側は普通の床。
+  // 歩ける半幅と躯体の間(余白と縁石)は壁として歩けない。坂は両端からだけ出入りでき、側面からは入れも出られもしない。
+  const ROGUE_RAMP_CURB_W = 0.36;
+  const ROGUE_RAMP_WALK_MARGIN = 0.4;
+  const ROGUE_RAMP_BODY_MIN_GAP = 0.05;
+  function rogueRampSameAxis(h,a){
+    return h.type==='corridor'&&Math.abs(h.ax-a.ax)<1e-6&&Math.abs(h.az-a.az)<1e-6&&Math.abs(h.bx-a.bx)<1e-6&&Math.abs(h.bz-a.bz)<1e-6;
+  }
+  function rogueIsRampArea(a){
+    return !!a&&a.type==='segment'&&Math.abs((a.yB||0)-(a.yA||0))>1e-5;
+  }
+  // 坂と同じ軸の切り欠きが広間の床にあれば、その幅まで坂を広げる(切り欠きと坂の間に隙間を残さない)。
+  function rogueRampSlotWidth(a,areas){
+    let w=a.width;
+    for(const e of areas){
+      if(e.type!=='ellipse')continue;
+      for(const h of (e.floorHoles||[]))if(rogueRampSameAxis(h,a))w=Math.max(w,h.width);
+    }
+    return w;
+  }
+  const ROGUE_RAMP_CACHE = new WeakMap();
+  function getRogueRamps(areas){
+    if(ROGUE_RAMP_CACHE.has(areas))return ROGUE_RAMP_CACHE.get(areas);
+    const list=[];
+    areas.forEach((a,index)=>{
+      if(!rogueIsRampArea(a))return;
+      const dx=a.bx-a.ax,dz=a.bz-a.az,L=Math.hypot(dx,dz);
+      if(!(L>1e-6))return;
+      const hvis=rogueRampSlotWidth(a,areas)*.5;
+      list.push({area:a,index,ax:a.ax,az:a.az,bx:a.bx,bz:a.bz,ux:dx/L,uz:dz/L,L,yA:a.yA||0,yB:a.yB||0,
+        hvis,hwalk:hvis-ROGUE_RAMP_WALK_MARGIN,hbody:hvis+ROGUE_RAMP_CURB_W});
+    });
+    ROGUE_RAMP_CACHE.set(areas,list);
+    return list;
+  }
+  // 点を坂の座標(along=始点からの距離, lat=中心線からの横ずれ, t=0..1)へ直す。
+  function rogueRampLocal(g,x,z){
+    const along=(x-g.ax)*g.ux+(z-g.az)*g.uz;
+    const lat=(x-g.ax)*g.uz-(z-g.az)*g.ux;
+    return {along,lat,t:Math.max(0,Math.min(1,along/g.L))};
+  }
+  function rogueRampSurfaceY(g,t){return g.yA+(g.yB-g.yA)*t;}
+  // 点が坂の矩形(長さ方向は始点〜終点、横は half まで)の中にあれば、その坂の座標を返す。
+  function rogueRampHit(g,x,z,half){
+    const p=rogueRampLocal(g,x,z);
+    return p.along>=-1e-6&&p.along<=g.L+1e-6&&Math.abs(p.lat)<=half+1e-6?p:null;
+  }
+  // 描画上の坂の石畳の範囲にいる時だけ、坂の面の高さを返す(敵・宝箱・カメラの高さ用)。範囲外は null。
+  function getRogueRampSurfaceHeight(x,z,variant='classic',extra=0){
+    for(const g of getRogueRamps(getRogueDungeonDefinition(variant).areas)){
+      const p=rogueRampHit(g,x,z,g.hvis+extra);
+      if(p)return rogueRampSurfaceY(g,p.t);
+    }
+    return null;
+  }
   function getRogueDungeonFloorCandidates(x,z,openGates=0,variant='classic'){
     if(!Number.isFinite(x)||!Number.isFinite(z))return [];
     const def=getRogueDungeonDefinition(variant), areas=def.areas, gateZ=def.gates;
@@ -292,36 +354,46 @@
       if(Math.abs(x-15)<1.10)return [{id:'bridge:east',kind:'bridge',y:0,t:null,d:0,area:null}];
       return [];
     }
+    const ramps=getRogueRamps(areas);
     const result=[];
     for(let i=0;i<areas.length;i++){
       const a=areas[i];
       if(a.type==='segment'){
         const dx=a.bx-a.ax,dz=a.bz-a.az,len=Math.hypot(dx,dz);
         if(len<1e-6)continue;
+        const g=rogueIsRampArea(a)?ramps.find(r=>r.area===a):null;
+        if(g){
+          const p=rogueRampHit(g,x,z,g.hwalk);
+          if(p)result.push({id:`${variant}:segment:${i}`,kind:'ramp',y:rogueRampSurfaceY(g,p.t),t:p.t,d:Math.abs(p.lat),area:a});
+          continue;
+        }
         const along=((x-a.ax)*dx+(z-a.az)*dz)/len;
         const lateral=((x-a.ax)*dz-(z-a.az)*dx)/len;
         if(along< -1e-6||along>len+1e-6||Math.abs(lateral)>a.width*(variant==='linear'?.5:.45)+1e-6)continue;
         const t=Math.max(0,Math.min(1,along/len));
         const y=(a.yA||0)+((a.yB||0)-(a.yA||0))*t;
-        result.push({id:`${variant}:segment:${i}`,kind:Math.abs((a.yB||0)-(a.yA||0))>1e-5?'ramp':'segment',y,t,d:Math.abs(lateral),area:a});
+        result.push({id:`${variant}:segment:${i}`,kind:'segment',y,t,d:Math.abs(lateral),area:a});
       }else if(a.type==='ellipse'){
         const metric=((x-a.x)/a.rx)**2+((z-a.z)/a.rz)**2;
         if(metric<=1.021&&!rogueFloorHoleContainsPoint(a,x,z))result.push({id:`${variant}:ellipse:${i}`,kind:'ellipse',y:Number.isFinite(a.floorY)?a.floorY:0,metric,area:a});
       }
     }
-    return rogueDropFloorsInsideRampBody(result);
+    return rogueDropFloorsInsideRampBody(result,x,z,ramps);
   }
-  // v70.12: 坂は石の躯体で、面から下の広間の床までが石で埋まっている(描画: rogueRampBuildShape)。
-  // 坂の面より低い床は「石の中」なので、立てる床として返さない。
-  // 坂の真下に広間の床が重なる所(西の高台への上り坂、深層への坂が下の広間へ届く所)で、
-  // 坂の始点の脇や側面から広間の床の高さのまま坂の中へ歩き込めてしまうのを防ぐ。
-  // 坂の始点・終点付近で面が床と同じ高さ(差がRAMP_BODY_MIN_GAP以下)の間は、どちらにも立てる。
-  const ROGUE_RAMP_BODY_MIN_GAP = 0.05;
-  function rogueDropFloorsInsideRampBody(candidates){
-    let rampTop=-Infinity;
-    for(const c of candidates)if(c.kind==='ramp'&&c.y>rampTop)rampTop=c.y;
-    if(rampTop===-Infinity)return candidates;
-    return candidates.filter(c=>c.kind==='ramp'||c.y>=rampTop-ROGUE_RAMP_BODY_MIN_GAP);
+  // 坂は石の躯体で、面から下(広間の床まで)が石で埋まっている。躯体の範囲(縁石まで含む)では、
+  // 坂の面より低い床は「石の中」なので立てる床として返さない。これで坂の真下・縁石の下の広間の床へは入れない。
+  // 坂の面と同じ高さ(差が RAMP_BODY_MIN_GAP 以下)の床は残すので、坂の端から広間の床へ段差なく乗り移れる。
+  // 坂より高い床(高台・坂が潜る広間の床)も残す。
+  function rogueDropFloorsInsideRampBody(candidates,x,z,ramps){
+    if(!ramps.length||!candidates.length)return candidates;
+    let out=candidates;
+    for(const g of ramps){
+      const p=rogueRampHit(g,x,z,g.hbody);
+      if(!p)continue;
+      const surface=rogueRampSurfaceY(g,p.t);
+      out=out.filter(c=>c.area===g.area||c.y>=surface-ROGUE_RAMP_BODY_MIN_GAP);
+    }
+    return out;
   }
   function isRogueDungeonWalkable(x,z,openGates=0,variant='classic'){
     if(!Number.isFinite(x)||!Number.isFinite(z))return false;
@@ -329,43 +401,34 @@
     const gates=Math.max(0,Math.min(gateZ.length,Math.floor(Number(openGates)||0)));
     for(let i=gates;i<gateZ.length;i++)if(Math.abs(z-gateZ[i])<1.05&&Math.abs(x)<5.5)return false;
     if(variant!=='linear'&&Math.abs(z+83)<4.55&&Math.abs(x)<38)return Math.abs(x)<1.48||Math.abs(x-15)<1.10;
-    return areas.some(a=>{
+    const ramps=getRogueRamps(areas);
+    const base=areas.some(a=>{
       if(a.type==='ellipse')return rogueAreaWalkableContains(a,x,z);
-      return a.type==='segment'&&roguePointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz)<=a.width*(variant==='linear'?.5:.45);
+      if(a.type!=='segment')return false;
+      if(rogueIsRampArea(a)){
+        const g=ramps.find(r=>r.area===a);
+        return !!g&&!!rogueRampHit(g,x,z,g.hwalk);
+      }
+      return roguePointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz)<=a.width*(variant==='linear'?.5:.45);
     });
+    if(!base)return false;
+    // 坂の躯体の範囲(縁石の下・坂の真下)は、坂の面以外に立てる床が残っている所だけ歩ける。
+    for(const g of ramps){
+      if(rogueRampHit(g,x,z,g.hbody)&&!rogueRampHit(g,x,z,g.hwalk))return getRogueDungeonFloorCandidates(x,z,openGates,variant).length>0;
+    }
+    return true;
   }
 
-  // 斜面通路の側壁は見た目だけのメッシュなので、側面から坂へ乗り上げる侵入だけを止める。
-  // 坂の内側から外側の歩行可能な地面へ降りる移動は妨げない。
-  // 端から通路方向へ入る通常の移動や、通路内を進む動きも維持する。
+  // 坂の側面(縁石の壁)を横切って、脇から坂の上へ入る移動だけを返す。
+  // v70.13 からは壁そのものが歩けない領域(hwalk〜hbody)なので、移動経路の検証が自然に止める。
+  // この関数は互換のために残してあり、坂の端から軸方向に入る動きや、坂の上を進む動きは常に許可する。
   function isRogueRampSideEntryBlocked(fromX,fromZ,toX,toZ,variant='classic'){
     if(![fromX,fromZ,toX,toZ].every(Number.isFinite))return false;
-    for(const a of getRogueDungeonDefinition(variant).areas){
-      if(a.type!=='segment'||Math.abs((a.yB||0)-(a.yA||0))<1e-5)continue;
-      const dx=a.bx-a.ax,dz=a.bz-a.az,len2=dx*dx+dz*dz;
-      const len=Math.sqrt(len2);
-      if(len<1e-5)continue;
-      const point=(x,z)=>{
-        const t=((x-a.ax)*dx+(z-a.az)*dz)/len2;
-        const qx=a.ax+t*dx,qz=a.az+t*dz;
-        return {t,d:Math.hypot(x-qx,z-qz)};
-      };
-      const from=point(fromX,fromZ),to=point(toX,toZ);
-      // 端からの通常の出入りは許可する。ただし、端の近くでも横方向に側面を
-      // 横切る動きは別扱いにする。以前は to.t だけを見ていたため、端の横から
-      // 坂へ乗り上げる動きまで見逃していた。
-      const endT=Math.min(0.14,1.25/len);
-      const alongDistance=Math.abs(to.t-from.t)*len;
-      const sideDistance=Math.abs(to.d-from.d);
-      const towardStart=to.t<from.t&&(from.t<=endT||to.t<=endT);
-      const towardFinish=to.t>from.t&&(from.t>=1-endT||to.t>=1-endT);
-      const traversesEndpoint=(towardStart||towardFinish)&&alongDistance>Math.max(0.55,sideDistance*1.25);
-      if(traversesEndpoint)continue;
-      // 坂の歩行可能判定・床高補間と同じ境界にそろえる。
-      // 見た目の側壁より外側を境界にすると、地面へ降りた後で見えない壁に引っ掛かる。
-      const walkLimit=a.width*0.45;
-      // 外側から坂の歩行領域へ入る動きだけ遮断。坂から隣の歩行可能な地面へ出る動きは通す。
-      if(from.d>walkLimit&&to.d<=walkLimit)return true;
+    for(const g of getRogueRamps(getRogueDungeonDefinition(variant).areas)){
+      const f=rogueRampLocal(g,fromX,fromZ),t=rogueRampLocal(g,toX,toZ);
+      const toOnRamp=t.along>=0&&t.along<=g.L&&Math.abs(t.lat)<=g.hwalk;
+      const fromBesideBody=f.along>=0&&f.along<=g.L&&Math.abs(f.lat)>g.hwalk;
+      if(toOnRamp&&fromBesideBody)return true;
     }
     return false;
   }
@@ -3171,7 +3234,7 @@
   return {
     WORLD_SIZE, noise2, islandHeight, mulberry32, WorldSim, MAX_BULK_PICKUP_IDS,
     WORLD_LAYOUT_VERSION, CHEST_INTERACT_RADIUS, LIGHTHOUSE, getLighthouseLocation, lighthouseFloorY, lighthouseRailClamp, lighthouseChestSpot, getFeatureClearZones, SPRING, springTerrainOffset, getSpringLocations, getRuinLocations, getChestLocations, getUnderwaterLayout, resolveFencePoint, moveFencePoint,
-    isRogueRampSideEntryBlocked,
+    isRogueRampSideEntryBlocked, getRogueRamps, getRogueRampSurfaceHeight, rogueRampSlotWidth, rogueRampLocal, ROGUE_RAMP_WALK_MARGIN, ROGUE_RAMP_CURB_W,
     FENCE_MIN_LENGTH, FENCE_MAX_LENGTH, FENCE_JOIN_TOLERANCE, fenceEndpoints, fenceEndpointJoin, fenceEndsMeet,
     ENEMY_WOLF_COUNT, ENEMY_BOAR_COUNT, ENEMY_LIZARD_COUNT, ENEMY_CRAB_COUNT, ENEMY_JELLY_COUNT, ENEMY_CLASSIC_WOLF_COUNT, ENEMY_CLASSIC_BOAR_COUNT, ENEMY_KINDS, ENEMY_ORDER, ENEMY_CAMP_KINDS, ENEMY_CAMP_START, isCampEnemyId, getCampIndexForEnemyId, ENEMY_GROTTO_KINDS, ENEMY_GROTTO_START, isGrottoEnemyId, GROTTO, getGrottoLocation, grottoChestSpot, grottoWallSolids, CAMP, getCampLocation, getCampLocations, campChestSpot, MOVE_ID, JELLY_WATER_MIN, JELLY_WATER_MAX, jellyHeight, enemyCanStand, enemyCanReach, WADE_MIN, CAVE_SITES, CAVE_AREA, isInsideCaveArea, BUILD_RADIUS, checkPlacement, snapBuildPlacement, hashKey, MAX_CHESTS,
     CHAT_MAX_CHARS, CHAT_INTERVAL_MS, EMOTE_COUNT, cleanChat, BODY_RADIUS, bodyPush,

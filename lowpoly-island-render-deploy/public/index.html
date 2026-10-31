@@ -567,7 +567,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v70.12</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v70.13</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -1676,28 +1676,35 @@ window.startGame = function(NETINIT){
     return Math.hypot(x-(ax+dx*t), z-(az+dz*t));
   }
   function rogueFloorHeight(x,z,segmentFactor=ROGUE_DUNGEON_VARIANT==='linear'?0.5:0.45){
-    // 傾斜通路は接続点から接続点まで高さを線形補間し、部屋の床と段差なく結ぶ。
-    let best=null;
-    for(const a of ROGUE_WALK_AREAS){
-      if(a.type!=='segment') continue;
-      // 平らな通路でも床高が0mでなければ(新ダンジョンの深層への通路は-1.2m)対象にする。
-      if(Math.abs((a.yB||0)-(a.yA||0))<1e-5&&Math.abs(a.yA||0)<1e-5) continue;
-      const dx=a.bx-a.ax,dz=a.bz-a.az,len2=dx*dx+dz*dz;
-      const t=len2>1e-8?THREE.MathUtils.clamp(((x-a.ax)*dx+(z-a.az)*dz)/len2,0,1):0;
-      const d=pointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz);
-      if(d<=a.width*segmentFactor&&(!best||d<best.d)) best={d,y:(a.yA||0)+((a.yB||0)-(a.yA||0))*t};
-    }
-    if(best) return best.y;
-    // 広間の楕円どうしが重なる場所では、配列の先頭の床を優先すると
-    // 高台や低地が通常床(0m)へ飛ぶ。正規化距離が最も近い広間の床高を使う。
-    let bestEllipse=null,bestMetric=Infinity;
+    // 広間(楕円)の床高。楕円どうしが重なる場所では、配列の先頭の床を優先すると
+    // 高台や低地が通常床(0m)へ飛ぶので、正規化距離が最も近い広間の床高を使う。
+    let ellipseY=null,bestMetric=Infinity;
     for(const a of ROGUE_WALK_AREAS){
       if(a.type!=='ellipse')continue;
       const metric=((x-a.x)/a.rx)**2+((z-a.z)/a.rz)**2;
-      if(metric<=1.035&&!Shared.rogueFloorHoleContainsPoint(a,x,z)&&metric<bestMetric){bestMetric=metric;bestEllipse=a;}
+      if(metric<=1.035&&!Shared.rogueFloorHoleContainsPoint(a,x,z)&&metric<bestMetric){bestMetric=metric;ellipseY=Number.isFinite(a.floorY)?a.floorY:0;}
     }
-    if(bestEllipse)return Number.isFinite(bestEllipse.floorY)?bestEllipse.floorY:0;
-    return 0;
+    // v70.13: 坂は歩行判定・描画と同じ矩形(Shared.getRogueRamps)で面の高さを返す。
+    // 以前の「通路の中心線までの距離」(端の外側も丸く拾う)では、坂の端の外や縁石の外まで坂の高さになっていた。
+    // segmentFactor が大きい呼び出し(カメラ用 0.58)は、坂の外側へその分だけ余裕を持たせる。
+    const rampY=Shared.getRogueRampSurfaceHeight(x,z,ROGUE_DUNGEON_VARIANT,Math.max(0,segmentFactor-0.5)*10);
+    if(rampY!==null){
+      // 坂の端で広間の床が坂の面より少し高い(高台の床の縁など)時は、歩く時と同じく高い方の床に立つ。
+      return (ellipseY!==null&&ellipseY>rampY&&ellipseY-rampY<=ROGUE_MAX_STEP_UP)?ellipseY:rampY;
+    }
+    // 平らでも床高が0mでない通路(新ダンジョンの深層への通路は-1.2m)は、通路の中心線までの距離で判定する。
+    let best=null;
+    for(const a of ROGUE_WALK_AREAS){
+      if(a.type!=='segment') continue;
+      if(Math.abs((a.yB||0)-(a.yA||0))>1e-5) continue; // 傾斜路は上の矩形で処理済み
+      if(Math.abs(a.yA||0)<1e-5) continue;
+      const dx=a.bx-a.ax,dz=a.bz-a.az,len2=dx*dx+dz*dz;
+      const t=len2>1e-8?THREE.MathUtils.clamp(((x-a.ax)*dx+(z-a.az)*dz)/len2,0,1):0;
+      const d=pointSegmentDistance2D(x,z,a.ax,a.az,a.bx,a.bz);
+      if(d<=a.width*segmentFactor&&(!best||d<best.d)) best={d,y:a.yA||0};
+    }
+    if(best) return best.y;
+    return ellipseY!==null?ellipseY:0;
   }
 
   function isRogueWalkable(x,z,openGates){
@@ -1736,21 +1743,6 @@ window.startGame = function(NETINIT){
        !(airborne===true&&Number.isFinite(footY)&&Math.abs(preferred.y-footY)>ROGUE_MAX_STEP_UP+0.15)) return preferred;
     eligible.sort((a,b)=>Math.abs(a.y-referenceY)-Math.abs(b.y-referenceY)||b.y-a.y);
     return eligible[0];
-  }
-  function rogueAlignedRampCandidate(candidates,fromX,fromZ,toX,toZ,referenceY){
-    const dx=toX-fromX,dz=toZ-fromZ,length=Math.hypot(dx,dz);
-    if(length<1e-5)return null;
-    let best=null,bestScore=Infinity;
-    for(const c of candidates){
-      if(c.kind!=='ramp'||Math.abs(c.y-referenceY)>ROGUE_MAX_STEP_UP+1e-6)continue;
-      if(!c.area||c.d>c.area.width*0.28)continue;
-      const rx=c.area.bx-c.area.ax,rz=c.area.bz-c.area.az,rLen=Math.hypot(rx,rz)||1;
-      const alignment=Math.abs((dx*rx+dz*rz)/(length*rLen));
-      if(alignment<0.72)continue;
-      const score=Math.abs(c.y-referenceY)+c.d*0.02;
-      if(score<bestScore){best=c;bestScore=score;}
-    }
-    return best;
   }
   function roguePlayerFloorHeight(x,z){
     const openGates=rogueRun?rogueRun.openGates:0;
@@ -1830,19 +1822,10 @@ window.startGame = function(NETINIT){
   // 高台の床の下へ潜り込んで段差ができていた。
   // ここでは坂の形を頂点列として直接計算する(THREE に依存しない純粋な関数なのでテストでも同じ物を実行できる)。
   // 歩行・当たり判定の定義(ROGUE_WALK_AREAS)は一切変えず、描画だけを共有定義に合わせて作る。
-  const ROGUE_RAMP_VIS = Object.freeze({drop:.14, curbH:.42, curbW:.36, thick:.9, step:.6, inside:.975, tread:1.6, minCut:.3});
-  function rogueRampSameAxis(h,a){
-    return h.type==='corridor'&&Math.abs(h.ax-a.ax)<1e-6&&Math.abs(h.az-a.az)<1e-6&&Math.abs(h.bx-a.bx)<1e-6&&Math.abs(h.bz-a.bz)<1e-6;
-  }
-  // 広間の床の切り欠きと同じ幅まで坂を広げる(切り欠きと坂の間に隙間を残さない)。
-  function rogueRampSlotWidth(a,areas){
-    let w=a.width;
-    for(const e of areas){
-      if(e.type!=='ellipse')continue;
-      for(const h of (e.floorHoles||[]))if(rogueRampSameAxis(h,a))w=Math.max(w,h.width);
-    }
-    return w;
-  }
+  const ROGUE_RAMP_VIS = Object.freeze({drop:.14, curbH:.42, curbW:Shared.ROGUE_RAMP_CURB_W, thick:.9, step:.6, inside:.975, tread:1.6, minCut:.3});
+  // 坂の矩形・幅は Shared.getRogueRamps と同じ定義を使う(歩行判定との食い違いを作らない)。
+  const rogueRampSameAxis=(h,a)=>h.type==='corridor'&&Math.abs(h.ax-a.ax)<1e-6&&Math.abs(h.az-a.az)<1e-6&&Math.abs(h.bx-a.bx)<1e-6&&Math.abs(h.bz-a.bz)<1e-6;
+  const rogueRampSlotWidth=(a,areas)=>Shared.rogueRampSlotWidth(a,areas);
   // 坂の下に床があれば、その高さ(描画上の面)を返す。坂の側面をそこまで下ろして宙に浮かせない。
   function rogueRampGroundBelow(areas,x,z,topVis){
     let best=null;
@@ -3217,20 +3200,15 @@ window.startGame = function(NETINIT){
     updateRogueHud();
   }
   // すべてのダンジョン床で共通に使う移動検証。
-  // 坂専用の例外ではなく、移動経路を短い区間に分けて、歩行可能領域・側面侵入・
-  // 現在の床から登れる高さを同じ順序で確認する。下降は重力に任せる。
+  // 坂専用の例外はない。移動経路を短い区間に分けて、歩行可能領域と現在の床から登れる高さを確認する。
+  // 坂の側面は歩けない壁の領域(Shared の hwalk〜hbody)なので、側面からの出入りはここで自然に止まる。下降は重力に任せる。
   function rogueDungeonMovePathAllowed(fromX,fromZ,toX,toZ,openGates,footY,airborne){
     if(![fromX,fromZ,toX,toZ].every(Number.isFinite))return false;
-    const rampSideEntryBlocked=Shared.isRogueRampSideEntryBlocked(fromX,fromZ,toX,toZ,ROGUE_DUNGEON_VARIANT);
     const dx=toX-fromX,dz=toZ-fromZ,distance=Math.hypot(dx,dz);
     const steps=Math.max(1,Math.min(128,Math.ceil(distance/ROGUE_MOVE_SAMPLE_SPACING)));
     const startCandidates=rogueFloorCandidatesAt(fromX,fromZ,openGates);
     const preferredId=rogueRun?rogueRun.playerFloorSurfaceId:null;
     let previous=rogueChooseConnectedFloor(startCandidates,footY,footY,airborne,preferredId);
-    // 坂の低い接続端では床と傾斜面の高さがほぼ同じ。移動方向が坂の軸と一致し、
-    // かつ足元から小さな段差以内なら、進行する床として坂面へ接続できる。
-    const rampEntry=rampSideEntryBlocked?null:rogueAlignedRampCandidate(startCandidates,fromX,fromZ,toX,toZ,footY);
-    if(rampEntry)previous=rampEntry;
     if(!previous)return false;
     for(let i=1;i<=steps;i++){
       const t=i/steps,x=fromX+dx*t,z=fromZ+dz*t;
@@ -3238,9 +3216,6 @@ window.startGame = function(NETINIT){
       const candidates=rogueFloorCandidatesAt(x,z,openGates);
       const next=rogueChooseConnectedFloor(candidates,previous.y,footY,airborne,previous.id);
       if(!next)return false;
-      // 旧来の側面侵入防止は維持する。ただし、重なった別の階の床が連続している場合は
-      // その床を歩くことまで止めない。床のない場所で坂面へ乗り移ろうとする時だけ遮断。
-      if(rampSideEntryBlocked&&previous.kind!=='ramp'&&next.kind==='ramp')return false;
       if(next.y-previous.y>ROGUE_MAX_STEP_UP+1e-6 && !(airborne && footY>=next.y-ROGUE_AIRBORNE_FLOOR_TOLERANCE))return false;
       previous=next;
     }
@@ -10513,7 +10488,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=70.12-ramp-collision"></script>
+<script src="shared.js?v=70.13-ramp-rebuild"></script>
 <script src="boot.js"></script>
 </body>
 </html>

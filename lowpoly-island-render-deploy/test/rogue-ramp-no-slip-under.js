@@ -53,7 +53,7 @@ function extractConst(name) {
   return m ? m[0] : '';
 }
 const hasLandingReach = /const ROGUE_LANDING_SLOPE_REACH\s*=/.test(html);
-const fnNames = ['isRogueWalkable', 'rogueFloorCandidatesAt', 'rogueChooseConnectedFloor', 'rogueAlignedRampCandidate',
+const fnNames = ['isRogueWalkable', 'rogueFloorCandidatesAt', 'rogueChooseConnectedFloor',
   'roguePlayerFloorHeight', 'rogueDungeonMovePathAllowed', 'constrainRogueDungeonPosition', 'getPlayerFloor'];
 const constNames = ['ROGUE_MAX_STEP_UP', 'ROGUE_AIRBORNE_FLOOR_TOLERANCE', 'ROGUE_LANDING_SLOPE_REACH', 'ROGUE_MOVE_SAMPLE_SPACING', 'GRAV', 'JUMP'];
 function makeWorld(variant) {

@@ -1,3 +1,4 @@
+// v70.13: 坂の側面は壁(歩けない領域)で、入口は両端だけ。
 // v64.1: 坂専用の例外を減らし、上下階の重なりも含めて床面の連続性を検証する。
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
@@ -9,7 +10,7 @@ const moveStart=html.indexOf('  function rogueDungeonMovePathAllowed(',helperEnd
 const moveEnd=html.indexOf('  function constrainRogueDungeonPosition(',moveStart);
 if(helperStart<0||helperEnd<=helperStart||moveStart<0||moveEnd<=moveStart)throw new Error('unified floor movement helpers not found');
 const context={Shared,Math,Number,rogueRun:{openGates:3},grounded:true,player:{position:{y:0}},THREE:{MathUtils:{clamp:(v,min,max)=>Math.min(max,Math.max(min,v))}}};
-const source=html.slice(helperStart,helperEnd)+html.slice(moveStart,moveEnd)+'\nglobalThis.__test={ROGUE_WALK_AREAS,rogueFloorHeight,rogueFloorCandidatesAt,rogueChooseConnectedFloor,rogueAlignedRampCandidate,rogueDungeonMovePathAllowed};';
+const source=html.slice(helperStart,helperEnd)+html.slice(moveStart,moveEnd)+'\nglobalThis.__test={ROGUE_WALK_AREAS,rogueFloorHeight,rogueFloorCandidatesAt,rogueChooseConnectedFloor,rogueDungeonMovePathAllowed};';
 vm.runInNewContext(source,context,{timeout:1000});
 const T=context.__test;let failures=0;
 function check(name,ok,details=''){console.log((ok?'PASS ':'FAIL ')+name+(ok?'':' '+details));if(!ok)failures++;}
@@ -21,7 +22,7 @@ check('低い床と上段床が重なる場所を複数の床候補として保�
 check('上下階が重なる場所でも低い床にいる時は低い面を選ぶ',Math.abs(T.rogueChooseConnectedFloor(lowCandidates,0,0,false)?.y||0)<.05);
 check('同じ場所でも上段にいる時は上段床を選ぶ',Math.abs((T.rogueChooseConnectedFloor(lowCandidates,3.8,3.8,false)?.y||0)-3.8)<.05);
 check('重なった床の境界で低い床を歩いても上段へ瞬間移動しない',T.rogueDungeonMovePathAllowed(lowOverlap.x,lowOverlap.z,highOverlap.x,highOverlap.z,3,0,false));
-const ascendingRamp=ramps.find(a=>a.ax===-14&&a.az===-78&&a.bx===-29&&a.bz===-69);
+const ascendingRamp=ramps.find(a=>a.ax===-12&&a.az===-74&&a.bx===-29&&a.bz===-69);
 if(ascendingRamp){
   const rampMid={x:ascendingRamp.ax+(ascendingRamp.bx-ascendingRamp.ax)*.55,z:ascendingRamp.az+(ascendingRamp.bz-ascendingRamp.az)*.55};
   const underRamp=T.rogueFloorCandidatesAt(rampMid.x,rampMid.z,3);
@@ -39,7 +40,7 @@ if(ascendingRamp){
   check('坂の低い接続端から軸方向へ歩くと傾斜面へ接続する',T.rogueDungeonMovePathAllowed(entry.x,entry.z,climb.x,climb.z,3,entryY,false),`floor=${entryY}`);
   check('傾斜面へ接続した後は床IDを連続して保持する',String(context.rogueRun.playerFloorSurfaceId||'').startsWith('classic:segment:'));
   const dx=ascendingRamp.bx-ascendingRamp.ax,dz=ascendingRamp.bz-ascendingRamp.az,len=Math.hypot(dx,dz),nx=dz/len,nz=-dx/len;
-  const center={x:ascendingRamp.ax+dx*.55,z:ascendingRamp.az+dz*.55},limit=ascendingRamp.width*.45;
+  const center={x:ascendingRamp.ax+dx*.55,z:ascendingRamp.az+dz*.55},limit=Shared.getRogueRamps(Shared.ROGUE_WALK_AREAS).find(g=>g.area===ascendingRamp).hwalk;
   const outer={x:center.x+nx*(limit+.3),z:center.z+nz*(limit+.3)},inner={x:center.x+nx*(limit-.3),z:center.z+nz*(limit-.3)};
   context.rogueRun.playerFloorSurfaceId=null;
   const canMoveOnLowerFloor=T.rogueDungeonMovePathAllowed(outer.x,outer.z,inner.x,inner.z,3,0,false);
@@ -63,7 +64,7 @@ for(const a of ramps){
   const foot=T.rogueFloorHeight(start.x,start.z);
   check(`坂${a.ax},${a.az}から${a.bx},${a.bz}へ軸方向に進める`,T.rogueDungeonMovePathAllowed(start.x,start.z,end.x,end.z,3,foot,false));
 }
-const descending=ramps.find(a=>a.ax===15&&a.az===-90&&a.bx===30&&a.bz===-95);
+const descending=ramps.find(a=>a.ax===14&&a.az===-93&&a.bx===30&&a.bz===-95);
 if(descending){
   const dx=descending.bx-descending.ax,dz=descending.bz-descending.az;
   const start={x:descending.ax+dx*.94,z:descending.az+dz*.94},end={x:descending.ax+dx*1.18,z:descending.az+dz*1.18};

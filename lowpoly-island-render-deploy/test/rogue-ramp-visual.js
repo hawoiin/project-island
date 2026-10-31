@@ -46,7 +46,7 @@ for(const variant of ['classic','linear']){
     check(`${tag}: 面の勾配が定義と同じ向き・大きさ`,slopeOk);
   }
   if(variant==='classic'){
-    const west=areas.findIndex(s=>s.type==='segment'&&s.ax===-14&&s.az===-78);
+    const west=areas.findIndex(s=>s.type==='segment'&&s.ax===-12&&s.az===-74);
     const platform=areas.findIndex(s=>s.type==='ellipse'&&s.floorY===3.8);
     // 西の高台の床との差は最大0.14mだけ。床の縁が坂の面を隠しても段差にならないので、切り欠きは足さない。
     check('西の坂は高台の床へ浅く潜るだけなので、描画用の切り欠きを足さない',west>=0&&platform>=0&&!(built.cutsByArea.get(platform)||[]).length);
@@ -57,7 +57,7 @@ for(const variant of ['classic','linear']){
     const slotted=areas.map((s,i)=>({s,i})).filter(o=>o.s.type==='ellipse'&&(o.s.floorHoles||[]).some(h=>h.type==='corridor'));
     check('共有定義の切り欠きがある広間へ二重に切り欠きを足さない',slotted.every(o=>!(built.cutsByArea.get(o.i)||[]).length));
     // 溝の壁: 広間の床へ潜る所では、側面の上端が広間の床の面まで届く。
-    const east=areas.findIndex(s=>s.type==='segment'&&s.ax===15&&s.az===-90);
+    const east=areas.findIndex(s=>s.type==='segment'&&s.ax===14&&s.az===-93);
     const es=built.shapes.get(east),deep=es.stations[Math.floor(es.N*.6)];
     check('下り坂が広間の床の切り欠きへ潜る所では、側面が床の面まで立ち上がる',deep.sides.every(sd=>Math.abs(sd.wallTop-(0-V.drop+.02))<1e-6),`wallTop=${deep.sides.map(x=>x.wallTop.toFixed(2))}`);
     // 支え: 深層への坂は、下の広間の床の上へ入る所で側面がその床まで届く。

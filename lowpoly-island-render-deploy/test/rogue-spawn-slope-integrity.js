@@ -27,7 +27,7 @@ vm.runInNewContext(source,context,{timeout:1000});
 const floor=context.__floorTest.rogueFloorHeight;
 assert.ok(Math.abs(floor(-28,-67)-3.8)<.08,'overlapping central room must not overwrite the high ledge floor');
 assert.ok(Math.abs(floor(30,-99)-(-2.6))<.08,'overlapping central room must not overwrite the lower side chamber floor');
-assert.ok(Math.abs(floor(-21.5,-73.5)-1.9)<.08,'west ramp floor must interpolate continuously');
+assert.ok(Math.abs(floor(-20.5,-71.5)-1.9)<.08,'west ramp floor must interpolate continuously');
 assert.ok(Math.abs(floor(0,-159)-(-3.3))<.12,'deep ramp floor must interpolate continuously');
 assert.ok(/rootDir:\s*\./.test(fs.readFileSync(path.join(root,'render.yaml'),'utf8')),'Render config must use the supplied project folder as its root');
 console.log(`PASS safe spawns (${checkedEnemies} enemies/bosses, ${checkedChests} chests across 250 deterministic layouts)`);
