@@ -170,6 +170,17 @@
         charge: { shape: 'lane', r: [2.0, 2.3], dur: [1.3, 1.0], dmg: 22, len: [13, 16] },
       },
     },
+    // v70.14: 四つ足の本物のクマ。大熊(二足で立つ)より体が大きく重いが、走り出しの予告は短い。
+    grizzly: {
+      name: '山の主ヒグマ', maxHp: 70, radius: 1.9, respawnMs: 200000,
+      aggro: 22, chaseRange: 32, leash: 40, speed: 3.6, hitRange: 9,
+      closeAttack: 'slam', farAttack: 'charge', closeRange: 5.0,
+      recover: [0.8, 0.5], cooldown: [1.5, 0.9],
+      attacks: {
+        slam:   { shape: 'self', r: [4.2, 5.0], dur: [1.0, 0.8], dmg: 26 },
+        charge: { shape: 'lane', r: [2.3, 2.6], dur: [1.2, 0.9], dmg: 28, len: [15, 19] },
+      },
+    },
   };
   const BOSS_STATE_CODE = { idle: 0, chase: 1, slam: 2, rock: 3, recover: 4, charge: 5 }; // スナップショットで送る数字
   const BOSS_TYPES = Object.keys(BOSS_DEFS);
@@ -1115,10 +1126,11 @@
     return { x: 0, z: -40 };
   }
 
-  // 大熊の持ち場: 守護者・スタート地点・遺跡・宝箱・灯台・泉・野営地・洞窟から離れた、平らな草地(seedから再現できる)。
+  // 草地のボスの持ち場: 守護者・(先に決まった別のボス)・スタート地点・遺跡・宝箱・灯台・泉・野営地・洞窟から離れた、平らな草地(seedから再現できる)。
   // 他の配置の「避ける場所」には加えない(加えると既存ワールドの宝箱・野営地などの位置が変わるため)。
-  function getBearHome(seed) {
-    const random = mulberry32(((seed >>> 0) ^ 0x2c1b3a95) >>> 0);
+  // salt=ボスごとの乱数の種 avoid=避ける別のボスの持ち場 fallback=最後の保険の円の大きさと、それも駄目なときの場所
+  function findGrassBossHome(seed, salt, avoid, fallbackScale, lastResort) {
+    const random = mulberry32(((seed >>> 0) ^ salt) >>> 0);
     const guardian = getGuardianHome(seed);
     const ruins = getRuinLocations(seed, 6);
     const chests = getChestLocations(seed, ruins, MAX_CHESTS);
@@ -1132,6 +1144,7 @@
     const ok = (x, z, strict) => {
       if (!flat(x, z) || isInsideCaveArea(x, z, 14)) return false;
       if (Math.hypot(x - guardian.x, z - guardian.z) < (strict ? 50 : 30)) return false;
+      for (const h of avoid) if (Math.hypot(x - h.x, z - h.z) < (strict ? 50 : 30)) return false;
       if (Math.hypot(x, z - 6) < (strict ? 40 : 28)) return false;
       for (const r of ruins) if (Math.hypot(x - r.x, z - r.z) < (strict ? 18 : 12)) return false;
       for (const c of chests) if (c && Math.hypot(x - c.x, z - c.z) < 10) return false;
@@ -1145,14 +1158,22 @@
         if (ok(x, z, strict)) return { x, z };
       }
     }
-    for (let a = 0; a < 64; a++) { // 条件を満たす所がなかったときの保険(洞窟と守護者だけは避ける)
-      const x = Math.cos(a) * WORLD_SIZE * 0.2, z = Math.sin(a) * WORLD_SIZE * 0.2;
-      if (islandHeight(x, z) > 1.5 && !isInsideCaveArea(x, z, 8) && Math.hypot(x - guardian.x, z - guardian.z) > 20) return { x, z };
+    for (let a = 0; a < 64; a++) { // 条件を満たす所がなかったときの保険(洞窟と、他のボスの持ち場だけは避ける)
+      const x = Math.cos(a) * WORLD_SIZE * fallbackScale, z = Math.sin(a) * WORLD_SIZE * fallbackScale;
+      if (islandHeight(x, z) > 1.5 && !isInsideCaveArea(x, z, 8) && Math.hypot(x - guardian.x, z - guardian.z) > 20 && avoid.every(h => Math.hypot(x - h.x, z - h.z) > 20)) return { x, z };
     }
-    return { x: 0, z: 40 };
+    return lastResort;
   }
+  // 大熊の持ち場はヒグマの持ち場を決めるときにも使うので、直近のseedの結果を覚えておく(ワールド作成時に二度探さない)。
+  let bearHomeCache = { seed: null, home: null };
+  function getBearHome(seed) {
+    if (bearHomeCache.seed !== seed) bearHomeCache = { seed, home: findGrassBossHome(seed, 0x2c1b3a95, [], 0.2, { x: 0, z: 40 }) };
+    return { x: bearHomeCache.home.x, z: bearHomeCache.home.z };
+  }
+  // ヒグマの持ち場: 大熊とは別の草地(大熊の持ち場から50m以上離す)。
+  function getGrizzlyHome(seed) { return findGrassBossHome(seed, 0x5e7d19c3, [getBearHome(seed)], 0.3, { x: 40, z: 0 }); }
 
-  const BOSS_HOME_FINDERS = { guardian: getGuardianHome, bear: getBearHome };
+  const BOSS_HOME_FINDERS = { guardian: getGuardianHome, bear: getBearHome, grizzly: getGrizzlyHome };
   function getBossHome(seed, type) { return BOSS_HOME_FINDERS[type || 'guardian'](seed); }
 
   // ---- 建築の設置ルール ----

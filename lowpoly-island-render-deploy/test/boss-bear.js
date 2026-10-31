@@ -8,7 +8,7 @@ const gy = (x, z) => Shared.islandHeight(x, z);
 const B = Shared.BOSS_DEFS.bear, G = Shared.BOSS_DEFS.guardian;
 
 // ---- 定義表 ----
-check('ボスの種類は守護者と大熊', Shared.BOSS_TYPES.join() === 'guardian,bear');
+check('ボスの種類は守護者・大熊・ヒグマ', Shared.BOSS_TYPES.join() === 'guardian,bear,grizzly');
 check('大熊は叩きつけと突進を持つ', !!B.attacks.slam && !!B.attacks.charge && B.attacks.charge.shape === 'lane');
 check('大熊の攻撃の名前が状態コードにある', Object.keys(B.attacks).every(k => k in Shared.BOSS_STATE_CODE));
 check('大熊は守護者より速く、体力は少ない', B.speed > G.speed && B.maxHp < G.maxHp);
@@ -49,7 +49,7 @@ const towardCenter = d => {
 { // welcome / スナップショット
   const { w, join, bc } = mkWorld();
   const wel = w.welcomeFor(99);
-  check('welcome に2体のボスが入る', wel.bosses.length === 2 && wel.bosses.some(b => b.id === 'bear' && b.hp === B.maxHp && b.x === home.x));
+  check('welcome に3体のボスが入る', wel.bosses.length === 3 && wel.bosses.some(b => b.id === 'bear' && b.hp === B.maxHp && b.x === home.x));
   join(1, home.x + 60, home.z);
   w.broadcastSnap();
   const sn = bc.find(m => m.t === 'snap');
@@ -84,7 +84,7 @@ const towardCenter = d => {
   w.handle(1, { t: 'hitboss', id: 'bear', dmg: 1 });
   const dead = bc.find(m => m.t === 'bdead');
   check('体力が尽きると大熊だけ撃破される(bdead にid)', !bear.alive && guardian.alive && dead && dead.id === 'bear');
-  check('撃破後の welcome には守護者だけが入る', w.welcomeFor(5).bosses.length === 1 && w.welcomeFor(5).bosses[0].id === 'guardian');
+  check('撃破後の welcome には大熊が入らない(守護者とヒグマは入る)', w.welcomeFor(5).bosses.length === 2 && w.welcomeFor(5).bosses.every(b => b.id !== 'bear') && w.welcomeFor(5).bosses.some(b => b.id === 'guardian'));
   w.tick(0.05);
   check('復活時間より前は復活しない', !w.bosses.get('bear').alive);
   w.bosses.get('bear').respawnAt = 0; bc.length = 0; w.tick(0.05);

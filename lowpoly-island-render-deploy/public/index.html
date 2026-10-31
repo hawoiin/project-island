@@ -567,7 +567,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v70.13</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v70.14</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -6288,7 +6288,7 @@ window.startGame = function(NETINIT){
     }
   }
 
-  // ============ ボス(島のボス: 遺跡の石の守護者・荒ぶる大熊) ============
+  // ============ ボス(島のボス: 遺跡の石の守護者・荒ぶる大熊・山の主ヒグマ) ============
   // 体力・位置・攻撃のタイミングはサーバー(shared.js の WorldSim)が決める。
   // ここでは見た目・攻撃の予告(赤い範囲)・HPバー・演出だけを担当する。前方は +z。
   // 種類ごとの違いは、名前・大きさを持つ Shared.BOSS_DEFS と、モデル・演出・報酬を持つ下の BOSS_LOOKS の2つの表だけ。
@@ -6492,6 +6492,82 @@ window.startGame = function(NETINIT){
     return g;
   }
 
+  // 山の主ヒグマの材質と部品(灰がかった焦げ茶の毛・白っぽい毛先・象牙色の長い爪・赤橙に光る目)
+  function grizzlyKit(){
+    return bossKit({
+      fur:     new THREE.MeshStandardMaterial({ color:0x5d4331, flatShading:true, roughness:1 }),
+      furDark: new THREE.MeshStandardMaterial({ color:0x32221a, flatShading:true, roughness:1 }),
+      tip:     new THREE.MeshStandardMaterial({ color:0xb7a48a, flatShading:true, roughness:1 }), // 毛先の白っぽい色(グリズリーの名前の由来)
+      belly:   new THREE.MeshStandardMaterial({ color:0x8a6a47, flatShading:true, roughness:1 }),
+      claw:    new THREE.MeshStandardMaterial({ color:0xeee4cc, flatShading:true, roughness:0.9 }),
+      glow:    new THREE.MeshStandardMaterial({ color:0xffa070, emissive:0xff3b12, emissiveIntensity:1.1, flatShading:true }),
+    });
+  }
+
+  // 山の主ヒグマ: 四つ足の本物のクマ。肩が大きく盛り上がり、頭は低く、鼻先が長い。
+  //   守護者・大熊と同じ約束(userData.parts)で作る: legs=後ろ脚2本・arms=前脚2本(肩が胴体の前にある)なので、歩行・攻撃の構え・被弾の光は updateBossOne がそのまま動かす。
+  //   userData.stance = { hip, lean, rise, armRaise }: 叩きつけの溜めでは後ろ脚で立ち上がり(rise=胴体をのけぞらせる量)、前脚を振り上げる(armRaise=前脚を上げる割合)。
+  function makeGrizzly(){
+    const g = new THREE.Group();
+    const { fur, furDark, tip, belly, claw, glow, block, boulder, spike } = grizzlyKit();
+    const HIP = 1.55;
+
+    // 後ろ脚(太い腿と大きな足の裏。足の裏は地面に付く)
+    const legs = [-1,1].map(sx => {
+      const p = new THREE.Group(); p.position.set(sx*1.05, HIP, -1.5);
+      p.add(block(1.1,1.0,1.7, fur, 0,-0.3,0.05));
+      p.add(block(0.85,0.75,0.9, furDark, 0,-1.1,0.2));
+      p.add(block(1.0,0.3,1.7, furDark, 0,-1.4,0.55));
+      for (const cx of [-0.32,0,0.32]) p.add(spike(0.07,0.5,claw, cx,-1.42,1.5, Math.PI/2,0));
+      g.add(p); return p;
+    });
+
+    // 胴体(腰を原点。のけぞり・身を低くする動きはこのグループを回す)。長い胴、肩(前)が高い
+    const torso = new THREE.Group(); torso.position.y = HIP; g.add(torso);
+    torso.add(block(2.5,1.7,2.6, fur, 0,0.85,-0.3));                       // 腰から背中
+    torso.add(block(2.7,2.0,2.2, fur, 0,1.1,1.45));                        // 肩まわり
+    torso.add(block(1.9,0.5,3.9, belly, 0,-0.05,0.4, 0.06));              // 腹
+    torso.add(boulder(1.4, fur, 0,2.3,1.35));                              // 肩のこぶ(クマの輪郭の特徴。腰より高い)
+    torso.add(boulder(0.8, fur, 0,1.5,-0.9));                              // 腰の盛り上がり(肩より低く小さい)
+    torso.add(boulder(0.3, furDark, 0,1.15,-2.0));                         // 短い尻尾
+    [[0.9,1.55],[0.55,2.7],[0.0,3.2],[-0.7,2.5],[-1.3,2.1]].forEach(([z,y],i) => {  // 背中の毛先(白っぽい)
+      torso.add(spike(0.28,0.7,tip, ((i%2)-0.5)*0.5,y,z+0.5, -0.2,0));
+    });
+    const core = block(0.08,0.5,0.14, glow, 1.36,1.2,1.1, 0); torso.add(core);   // 脇腹の古傷(赤橙に光る)
+    torso.add(block(0.08,0.35,0.1, glow, -1.36,1.3,0.6, 0));
+
+    // 首と頭: 頭は肩より低く下げ、鼻先が長く前へ出る。丸い耳・小さな目・下あごと牙
+    torso.add(block(1.7,1.5,1.4, fur, 0,1.3,2.55));
+    const head = new THREE.Group(); head.position.set(0,1.05,3.55); head.rotation.x = 0.12; torso.add(head);
+    head.add(block(1.55,1.35,1.5, fur, 0,0,0));
+    head.add(block(0.95,0.7,1.35, belly, 0,-0.28,1.15));                   // 鼻先
+    head.add(block(0.4,0.26,0.24, furDark, 0,-0.04,1.85, 0.03));          // 鼻
+    head.add(block(0.7,0.2,1.0, furDark, 0,-0.68,0.95, 0.04));            // 下あご
+    head.add(block(1.5,0.2,0.3, furDark, 0,0.4,0.62, 0.05));              // 眉
+    for (const sx of [-1,1]){
+      head.add(boulder(0.36, fur, sx*0.66,0.8,-0.3));                      // 丸い耳
+      head.add(boulder(0.18, furDark, sx*0.66,0.8,-0.12));
+      head.add(spike(0.08,0.34,claw, sx*0.3,-0.62,1.3, Math.PI,0));        // 牙
+    }
+    const eyes = [-1,1].map(sx => { const e = block(0.2,0.12,0.08, glow, sx*0.45,0.16,0.76, 0); head.add(e); return e; });
+
+    // 前脚(肩を原点に下へ伸ばす。太く、足の裏が地面に付き、長い爪が前へ出る)
+    const arms = [-1,1].map(sx => {
+      const p = new THREE.Group(); p.position.set(sx*1.35, 1.0, 1.55);
+      p.add(boulder(0.78, fur, 0,0.05,0));
+      p.add(block(1.15,1.9,1.25, fur, 0,-0.95,0));
+      p.add(block(1.05,0.6,1.1, furDark, 0,-1.9,0.05));
+      p.add(block(1.2,0.3,1.6, furDark, 0,-2.4,0.3));
+      for (const cx of [-0.38,0,0.38]) p.add(spike(0.09,0.85,claw, cx,-2.4,1.35, Math.PI/2,0));
+      p.rotation.z = sx*0.04;
+      torso.add(p); return p;
+    });
+
+    g.userData.parts = { torso, head, legs, arms, core, eyes, glow, bodyMats:[fur, furDark, belly, tip] };
+    g.userData.stance = { hip: HIP, lean: -0.03, rise: 0.62, armRaise: 0.62 };
+    return g;
+  }
+
   // どの守護者の見た目を出すか(ここを変えるだけで見た目が切り替わる)
   const GUARDIAN_MODELS = { stone: makeGuardian, brute: makeGuardianBrute };
   const GUARDIAN_MODEL = 'stone';
@@ -6502,6 +6578,8 @@ window.startGame = function(NETINIT){
                 bar: 'linear-gradient(90deg,#8fe9ff,#35a8d8)' },
     bear:     { model: makeBear, returnText: '縄張りに戻ってきた', reward: { relic: 5, itemId: 'item_ancient_gold' },
                 bar: 'linear-gradient(90deg,#ffb35a,#d8561f)' },
+    grizzly:  { model: makeGrizzly, returnText: '山に戻ってきた', reward: { relic: 6, itemId: 'item_ancient_gold' },
+                bar: 'linear-gradient(90deg,#d9c7a8,#7a4a2a)' },
   };
   // 攻撃の溜めの構え(予告の進み p=0→1 に合わせて動く): raise=腕を振り上げる量 crouch=身を低くして前へ構える量 shake=震え
   const BOSS_POSES = { slam: { raise: 0.95 }, rock: { raise: 0.6, shake: true }, charge: { raise: 0.2, crouch: 1 } };
@@ -6713,9 +6791,12 @@ window.startGame = function(NETINIT){
     boss.lean *= Math.max(0, 1 - dt*4);
     const shake = pose && pose.shake ? Math.sin(t*40)*0.04*boss.raise : 0;
     const swing = Math.sin(boss.walk + Math.PI) * 0.35 * walking * (1 - boss.raise);
-    P.arms[0].rotation.x = -Math.PI*boss.raise + swing + shake;
-    P.arms[1].rotation.x = -Math.PI*boss.raise - swing - shake;
-    P.torso.rotation.x = boss.stance.lean + boss.lean - boss.raise*0.18 + boss.crouch*0.35;
+    // stance.armRaise=腕(前脚)を上げる割合(既定1) stance.rise=溜めで胴体をのけぞらせる量(既定0.18。四つ足のヒグマは大きく立ち上がる)
+    const armRaise = boss.stance.armRaise === undefined ? 1 : boss.stance.armRaise;
+    const rise = boss.stance.rise === undefined ? 0.18 : boss.stance.rise;
+    P.arms[0].rotation.x = -Math.PI*boss.raise*armRaise + swing + shake;
+    P.arms[1].rotation.x = -Math.PI*boss.raise*armRaise - swing - shake;
+    P.torso.rotation.x = boss.stance.lean + boss.lean - boss.raise*rise + boss.crouch*0.35;
     P.torso.position.y = boss.stance.hip + Math.sin(t*1.6)*0.04 + Math.abs(Math.sin(boss.walk))*0.12*walking - boss.crouch*0.45;
 
     // 光: 戦闘中・攻撃の溜めで強く、ヒット直後は体が赤く光る
@@ -10488,7 +10569,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=70.13-ramp-rebuild"></script>
+<script src="shared.js?v=70.14-grizzly-boss"></script>
 <script src="boot.js"></script>
 </body>
 </html>
