@@ -13,6 +13,6 @@ const cave = start >= 0 && end > start ? html.slice(start, end) : '';
 check('地上洞窟の内部に中央祭壇・石柱・奥壁の刻印・石畳がある', cave.includes('const altar = new THREE.Group()') && cave.includes('for (const [px,pz,rot] of [[') && cave.includes('const backPanel = new THREE.Mesh') && cave.includes('const runeGlow =') && cave.includes('const tile = new THREE.Mesh(roughen(new THREE.BoxGeometry(2.8'));
 check('装飾の追加後も既存のenterCave/exitCave処理が存在する', /function enterCave\(idx(?:,\s*roguePartySelection=null)?\)\{/.test(html) && /function exitCave\(\)\{/.test(html) && html.includes('sfx.enterCave();'));
 check('洞窟内の移動範囲は従来の半径13.5mを維持', /const CAVE_ROOM_R = 13\.5/.test(html) && /const CAVE_ROOM_RADIUS = 13\.5/.test(shared));
-check('v70.17のバージョン表示とキャッシュ更新が反映される', /<div id="versionLabel"[^>]*>v70\.17<\/div>/.test(html) && html.includes('shared.js?v=70.17-shade-wraith'));
+check('v70.19のバージョン表示とキャッシュ更新が反映される', /<div id="versionLabel"[^>]*>v70\.19<\/div>/.test(html) && html.includes('shared.js?v=70.19-stone-sentinel'));
 check('通常洞窟と独立した広域ローグライクダンジョンが追加されている', html.includes('function buildRogueDungeonInterior()') && html.includes('ROGUE_WALK_AREAS') && html.includes('守護者を倒して脱出門を開く') && html.includes('function updateRogueDungeon(dt)'));
 console.log('Dungeon checks passed.');

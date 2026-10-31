@@ -1828,7 +1828,7 @@
     restoreRogueRecoveryState(raw) {
       this.rogueRecoveryStore.clear();
       if (!raw || typeof raw !== 'object' || raw.version !== 1 || !Array.isArray(raw.rooms)) return 0;
-      const validPartyKey = key => typeof key === 'string' && /^(?:linear:)?(?:solo:[a-f0-9]{16}|party:[A-Z0-9]{6})$/.test(key);
+      const validPartyKey = key => typeof key === 'string' && /^(?:linear:)?(?:solo:[a-f0-9]{16}|party:[A-Z0-9]{6}|world:all)$/.test(key);
       let restored = 0;
       for (const source of raw.rooms.slice(0,128)) {
         if (!source || typeof source !== 'object' || !validPartyKey(source.key) || this.rogueRecoveryStore.has(source.key)) continue;
@@ -2372,9 +2372,13 @@
           if(!c.joined || isRogueDungeonIndex(c.cave)) return;
           const dungeonType=msg.dungeonType==='linear'?'linear':'classic';
           c.rogueSelectedVariant=dungeonType;
-          const mode=msg.mode==='solo'?'solo':(msg.mode==='create'||msg.mode==='join'?'party':'');
+          const mode=msg.mode==='solo'?'solo':(msg.mode==='world'?'world':(msg.mode==='create'||msg.mode==='join'?'party':''));
           if(!mode) { c.roguePartyKey=null; this.out.sendTo(id,{t:'roguePartySelected',ok:false,reason:'invalid-mode'}); return; }
-          if(mode==='solo') {
+          if(mode==='world') {
+            // コード不要の標準の入り方。通常ワールドと同じく、同じワールドにいる全員が同じ探索ランに入る。
+            c.roguePartyKey='world:all';
+            this.out.sendTo(id,{t:'roguePartySelected',ok:true,mode:'world',code:''});
+          } else if(mode==='solo') {
             c.roguePartyKey=`solo:${c.pid || id}`;
             this.out.sendTo(id,{t:'roguePartySelected',ok:true,mode:'solo',code:''});
           } else {

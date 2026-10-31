@@ -21,7 +21,7 @@ check('敵の赤い攻撃予告は設定がOFFなら非表示になる', /if \(!
 check('ボスの赤い範囲リングも管理者設定に従う', /fill\.visible = edge\.visible = enemyAttackRangeDisplayEnabled/.test(client) && /if \(mark\.fill\) mark\.fill\.visible = enemyAttackRangeDisplayEnabled/.test(client));
 check('UI操作は管理者認証確認後にサーバーへ送る', /adminEnemyRangeToggle\.addEventListener\('change'[\s\S]*?if \(!adminAuthenticated \|\| !NETINIT\.online\)[\s\S]*?Net\.send\(\{ t:'adminSetAttackRangeDisplay', enabled:adminEnemyRangeToggle\.checked \}\)/.test(client));
 check('npm test に攻撃範囲設定の回帰テストが含まれる', pkg.scripts.test.includes('test/attack-range-admin-toggle.js'));
-check('タイトル画面にv70.17が表示される', /<div id="versionLabel"[^>]*>v70\.17<\/div>/.test(client));
+check('タイトル画面にv70.19が表示される', /<div id="versionLabel"[^>]*>v70\.19<\/div>/.test(client));
 check('野営地の新デザイン人型番人の配置は維持されている', /(?:raider:\s*\{|ENEMY_CAMP_KINDS\s*=\s*\['campGuard')/.test(fs.readFileSync(path.join(root, 'public/shared.js'), 'utf8')));
 {
   // v70.10: 旧仕様の単体変数 boss を参照すると接続直後に ReferenceError で起動できなくなる。

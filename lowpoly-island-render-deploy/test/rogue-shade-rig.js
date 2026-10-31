@@ -20,7 +20,7 @@ global.performance={now:()=>0};
 const code=`${slice('  function rogueRingLoftGeometry(','  const ROGUE_GEOMETRIES={')}
 const ROGUE_GEOMETRIES={${slice('    shadeTorso:rogueRingLoftGeometry','  };\n  const ROGUE_ATTACK_WARNING_GEO')}};
 const ROGUE_ENEMY_MATS={${slice('    shade:new THREE.MeshStandardMaterial({color:0x2a2442','    crawler:new THREE.MeshStandardMaterial').replace(/,\s*$/,'')}};
-function build(){const g=new THREE.Group();let visualRig=null;{${slice('      const M=ROGUE_ENEMY_MATS,G=ROGUE_GEOMETRIES;',"    }else{\n      const body=new THREE.Mesh(boss?")}}return visualRig;}
+function build(){const g=new THREE.Group();let visualRig=null;{${slice('      const M=ROGUE_ENEMY_MATS,G=ROGUE_GEOMETRIES;',"    }else if(kind==='sentinel'&&!boss){")}}return visualRig;}
 ${slice('  function updateRogueEnemyVisual(e,dt){','  function makeRogueChest')}
 return {ROGUE_GEOMETRIES,ROGUE_ENEMY_MATS,build,updateRogueEnemyVisual,updateRogueShadeDeath,ROGUE_SHADE_DEATH_HOLD};`;
 const api=new Function(code)();

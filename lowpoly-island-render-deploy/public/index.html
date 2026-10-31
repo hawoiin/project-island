@@ -552,7 +552,9 @@
     letter-spacing:.2em; text-transform:uppercase; }
   #roguePartyPanel button { display:block; width:100%; min-height:46px; margin-top:9px; padding:12px;
     border-radius:8px; border:1px solid #58777d; background:#243d45; color:#f2f4ef; font-weight:700; cursor:pointer; }
-  #roguePartyCreate { background:#2a665f !important; border-color:#5fc6b4 !important; }
+  #roguePartyWorld, #roguePartyCreate { background:#2a665f !important; border-color:#5fc6b4 !important; }
+  #roguePartyCodeBox { margin-top:12px; color:#d3e6e7; font-size:12px; }
+  #roguePartyCodeBox summary { cursor:pointer; padding:6px 0; color:#bac9cc; }
   #roguePartySolo, #roguePartyCancel { background:transparent !important; border-color:rgba(255,255,255,.2) !important; }
   #rogueRecoveryStatus { display:none; position:fixed; z-index:27; top:calc(env(safe-area-inset-top,0px) + 12px); left:50%; transform:translateX(-50%); max-width:min(92vw,520px); box-sizing:border-box; padding:8px 12px; border:1px solid rgba(125,223,224,.62); border-radius:9px; background:rgba(12,20,27,.88); color:#baf5e9; font-size:12px; line-height:1.4; text-align:center; pointer-events:none; box-shadow:0 5px 20px rgba(0,0,0,.22); }
   #rogueRecoveryStatus.show { display:block; }
@@ -567,7 +569,7 @@
   <input id="nameInput" type="text" maxlength="12" placeholder="名前（必須・12文字まで）" autocomplete="off" required>
   <button id="startBtn" disabled>島に降り立つ</button>
   <div id="netStatus">準備中…</div>
-  <div id="versionLabel" aria-label="ゲームバージョン">v70.17</div>
+  <div id="versionLabel" aria-label="ゲームバージョン">v70.19</div>
 </div>
 
 <div id="performanceHud" hidden aria-live="polite">性能計測を開始しています…</div>
@@ -618,16 +620,21 @@
 <div id="roguePartyPanel" role="dialog" aria-modal="true" aria-labelledby="roguePartyTitle">
   <div class="panel">
     <h2 id="roguePartyTitle">遺跡ダンジョンへ入る</h2>
-    <p>同じ6文字のパーティーコードを使うプレイヤーは、同じ探索ランに入ります。宝箱の報酬は全員が個別に獲得できます。</p>
+    <p>このワールドにいる全員が、コード入力なしで同じ探索ランに入れます。宝箱の報酬は全員が個別に獲得できます。</p>
     <small id="freePlanRogueNotice" hidden>Render Freeではサーバーの再起動・スリープ・更新で探索ランと遺品袋が失われます。再起動中に探索中だった場合は中断扱いとなり、携行装備と未精算の欠片を失います。保管庫と精算済み欠片はブラウザ側に残ります。</small>
-    <label for="roguePartyCodeInput">パーティーコード（6文字）
-      <input id="roguePartyCodeInput" type="text" maxlength="6" minlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例：7KQ4RD" />
-    </label>
-    <button id="roguePartyCreate" type="button">パーティーを作成して入る</button>
-    <button id="roguePartyJoin" type="button">コードで参加する</button>
+    <button id="roguePartyWorld" type="button">みんなと一緒に入る</button>
     <button id="roguePartySolo" type="button">ソロで入る</button>
+    <details id="roguePartyCodeBox">
+      <summary>仲間だけの部屋に入る（パーティーコード・任意）</summary>
+      <label for="roguePartyCodeInput">パーティーコード（6文字）
+        <input id="roguePartyCodeInput" type="text" maxlength="6" minlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例：7KQ4RD" />
+      </label>
+      <button id="roguePartyCreate" type="button">パーティーを作成して入る</button>
+      <button id="roguePartyJoin" type="button">コードで参加する</button>
+      <small>作成時に表示されるコードを仲間に共有してください。同じコードの人だけが同じ部屋に入ります。前回のコードは入力欄に再表示されます。</small>
+    </details>
     <button id="roguePartyCancel" type="button">キャンセル</button>
-    <small>作成時に表示されるコードを仲間に共有してください。前回のコードは入力欄に再表示され、同じ探索への再参加にも使えます。ゲーム全体の同時接続上限は16人です。</small>
+    <small>ゲーム全体の同時接続上限は16人です。</small>
   </div>
 </div>
 
@@ -2564,6 +2571,8 @@ window.startGame = function(NETINIT){
   const rogueMetaClose = document.getElementById('rogueMetaClose');
   const roguePartyPanel = document.getElementById('roguePartyPanel');
   const roguePartyCodeInput = document.getElementById('roguePartyCodeInput');
+  const roguePartyCodeBox = document.getElementById('roguePartyCodeBox');
+  const roguePartyWorld = document.getElementById('roguePartyWorld');
   const roguePartyCreate = document.getElementById('roguePartyCreate');
   const roguePartyJoin = document.getElementById('roguePartyJoin');
   const roguePartySolo = document.getElementById('roguePartySolo');
@@ -2611,8 +2620,9 @@ window.startGame = function(NETINIT){
     if(playerDead || inCaveIndex>=0 || !gameStarted || !caves[caveIndex] || !caves[caveIndex].isRogueDungeon) return;
     selectedRogueDungeonIndex=caveIndex;
     // 前回のコードを再表示し、死亡後でも同じ探索ランへ戻って遺品を回収しやすくする。
-    // 自動参加はせず、参加ボタンを押したときだけ接続先を決定する。
+    // 標準は「みんなと一緒に入る」(コード不要)。コードは仲間だけの部屋が欲しいときの任意の入口。
     roguePartyCodeInput.value=loadLastRoguePartyCode();
+    if(typeof roguePartyCodeBox!=='undefined') roguePartyCodeBox.open=false;
     roguePartyPanel.classList.add('show');
     if(document.pointerLockElement) document.exitPointerLock();
   }
@@ -2628,14 +2638,16 @@ window.startGame = function(NETINIT){
     if(mode==='party'||mode==='create') rememberLastRoguePartyCode(code);
     closeRoguePartyPanel();
     const targetIndex=Shared.isRogueDungeonIndex(selectedRogueDungeonIndex)?selectedRogueDungeonIndex:CLASSIC_ROGUE_DUNGEON_INDEX;
-    enterCave(targetIndex,{mode:mode==='solo'?'solo':mode,code:activeRoguePartyCode});
+    enterCave(targetIndex,{mode,code:activeRoguePartyCode});
     if(mode==='create') showToast(`パーティーコード：${code}（仲間に共有してください）`,'協力探索');
     else if(mode==='party') showToast(`パーティー ${code} に参加しました`,'協力探索');
+    else if(mode==='world') showToast('ワールドのみんなと同じ探索に入りました','協力探索');
   }
   roguePartyCodeInput.addEventListener('input',()=>{
     const clean=roguePartyCodeInput.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6);
     if(roguePartyCodeInput.value!==clean) roguePartyCodeInput.value=clean;
   });
+  roguePartyWorld.addEventListener('click',()=>enterRogueWithParty('world'));
   roguePartyCreate.addEventListener('click',()=>enterRogueWithParty('create',makeRoguePartyCode()));
   roguePartyJoin.addEventListener('click',()=>enterRogueWithParty('party',roguePartyCodeInput.value.trim().toUpperCase()));
   roguePartySolo.addEventListener('click',()=>enterRogueWithParty('solo'));
@@ -2703,6 +2715,12 @@ window.startGame = function(NETINIT){
     spitter:new THREE.MeshStandardMaterial({color:0x397b83,emissive:0x146c72,emissiveIntensity:.45,flatShading:true,roughness:.72}),
     charger:new THREE.MeshStandardMaterial({color:0x9b5837,emissive:0x5a2414,emissiveIntensity:.35,flatShading:true,roughness:.88}),
     sentinel:new THREE.MeshStandardMaterial({color:0x777a78,emissive:0x242a2b,emissiveIntensity:.28,flatShading:true,roughness:.85}),
+    // 石の番兵 v70.19: 「灰色の石 + 暗い石 + 苔 + 琥珀色に光るルーン」。光らせるのは目の裂け目・胸のルーン・ひびだけ。
+    // 琥珀色は、シェイドの青白・スピッターの水色・チャージャーの赤橙と取り違えない色として選んだ。
+    sentinelDark:new THREE.MeshStandardMaterial({color:0x4b4e50,emissive:0x141718,emissiveIntensity:.2,flatShading:true,roughness:.95}),
+    sentinelWorn:new THREE.MeshStandardMaterial({color:0x9a9c96,emissive:0x2a2c29,emissiveIntensity:.25,flatShading:true,roughness:.8}),
+    sentinelMoss:new THREE.MeshStandardMaterial({color:0x5d7a47,emissive:0x15200f,emissiveIntensity:.25,flatShading:true,roughness:1}),
+    sentinelRune:new THREE.MeshStandardMaterial({color:0xffe2a8,emissive:0xff9a1f,emissiveIntensity:1.1,flatShading:true,roughness:.5}),
     eye:new THREE.MeshBasicMaterial({color:0xff805e}),
     spitterCore:new THREE.MeshStandardMaterial({color:0x9dffff,emissive:0x2debf2,emissiveIntensity:1.4,flatShading:true,roughness:.3}),
     boss:new THREE.MeshStandardMaterial({color:0x4b394f,emissive:0x57206c,emissiveIntensity:.6,flatShading:true,roughness:.78})
@@ -2865,6 +2883,25 @@ window.startGame = function(NETINIT){
     rogueRun.lastCarrySyncAt=now;
     Net.send({t:'rogueCarryState',weaponBonus:rogueRun.weaponBonus,armorBonus:rogueRun.armorBonus,shards:rogueRun.shards,attackBuffMs:Math.round(Math.max(0,attackBuffTimer)*1000),speedBuffMs:Math.round(Math.max(0,speedBuffTimer)*1000)});
   }
+  // 石の番兵(v70.19)の部品。六角柱と十二面体で「削り出した石」の面を出す。顔の前方はローカル -Z。
+  // シェイドの試験用スタブには存在しない形状を使うので、ROGUE_GEOMETRIES とは別の定数にしてある。
+  const ROGUE_SENTINEL_GEOMETRIES={
+    chest:new THREE.CylinderGeometry(.78,.52,.98,6,1,false,Math.PI/6),
+    pelvis:new THREE.CylinderGeometry(.52,.44,.40,6,1,false,Math.PI/6),
+    slab:new THREE.BoxGeometry(.86,.84,.20),
+    shoulder:new THREE.DodecahedronGeometry(.40,0),
+    upperArm:new THREE.CylinderGeometry(.22,.26,.62,6),
+    foreArm:new THREE.CylinderGeometry(.27,.31,.50,6),
+    fist:new THREE.DodecahedronGeometry(.36,0),
+    leg:new THREE.CylinderGeometry(.30,.26,.66,6),
+    foot:new THREE.BoxGeometry(.58,.22,.78),
+    head:new THREE.BoxGeometry(.52,.44,.50),
+    brow:new THREE.BoxGeometry(.64,.12,.58),
+    eyeSlit:new THREE.BoxGeometry(.38,.07,.05),
+    rune:new THREE.BoxGeometry(.30,.30,.05),
+    crack:new THREE.BoxGeometry(.04,.36,.03),
+    tuft:new THREE.ConeGeometry(.09,.30,4)
+  };
   function makeRogueEnemy(kind,x,z,hp,stage,boss,optional=false,rogueId=''){
     const g=new THREE.Group();
     const mat=boss?ROGUE_ENEMY_MATS.boss:(ROGUE_ENEMY_MATS[kind]||ROGUE_ENEMY_MATS.shade);
@@ -2968,6 +3005,55 @@ window.startGame = function(NETINIT){
       });
 
       visualRig={humanoid:true,body,pelvis,torso,head,jaw,arms,legs,gaitPhase:Math.random()*Math.PI*2,phase:'idle',phaseTime:0,headBase,baseHeadX,baseLean,robe,cloth,core,eyes,mouth,swipe:0,settleT:9};
+    }else if(kind==='sentinel'&&!boss){
+      // v70.19: 石の番兵。厚い胸と肩の岩、太い石の腕、短い石の脚。重い体を揺すって歩き、
+      // 叩きつけの予告では両腕を頭の上へ振り上げ、振り下ろして地面を打つ。目の裂け目・胸のルーン・ひびだけが琥珀色に光る。
+      // 骨組みは 骨盤→胴→頭／肩→肘／股関節→足首。表示だけの変更で、判定の大きさは変わらない。
+      const M=ROGUE_ENEMY_MATS,G=ROGUE_SENTINEL_GEOMETRIES;
+      const part=(parent,geo,m,px,py,pz,o={})=>{
+        const mesh=new THREE.Mesh(geo,m);mesh.position.set(px,py,pz);
+        if(o.s)mesh.scale.set(o.s[0],o.s[1],o.s[2]);
+        if(o.r)mesh.rotation.set(o.r[0],o.r[1],o.r[2]);
+        parent.add(mesh);return mesh;
+      };
+      const runeMat=M.sentinelRune.clone();   // 敵ごとに光り方を変えるので、発光材だけは複製する
+      const body=new THREE.Group();g.add(body);
+      const pelvis=new THREE.Group();pelvis.position.set(0,.80,0);body.add(pelvis);
+      part(pelvis,G.pelvis,M.sentinelDark,0,0,0,{s:[1,1,.82]});
+      const torso=new THREE.Group();torso.position.set(0,.20,0);pelvis.add(torso);
+      part(torso,G.chest,mat,0,.46,0,{s:[1,1,.72]});
+      part(torso,G.slab,M.sentinelDark,0,.50,.36);                        // 背中の石板
+      for(const side of [-1,1])part(torso,G.tuft,M.sentinelMoss,side*.40,.98,.12,{r:[.2,0,-side*.35]});   // 肩の苔
+      // 胸のルーン(菱形)とひび
+      const rune=part(torso,G.rune,runeMat,0,.52,-.375,{r:[0,0,Math.PI/4]});
+      const cracks=[part(torso,G.crack,runeMat,-.26,.30,-.374,{r:[0,0,.35]}),part(torso,G.crack,runeMat,.30,.74,-.374,{r:[0,0,-.3]})];
+      const headBase=[0,1.12,-.04];
+      const head=new THREE.Group();head.position.set(headBase[0],headBase[1],headBase[2]);torso.add(head);
+      part(head,G.head,mat,0,0,0);
+      part(head,G.brow,M.sentinelWorn,0,.20,-.02);
+      const eye=part(head,G.eyeSlit,runeMat,0,.04,-.255);
+      // 腕: 肩の岩 → 上腕 → 肘 → 前腕 → 拳。肩の回転が正のとき腕は前へ上がる。
+      const arms=[];
+      for(const side of [-1,1]){
+        const baseS=.12,baseE=.18;
+        const shoulder=new THREE.Group();shoulder.position.set(side*.86,.76,0);shoulder.rotation.set(baseS,0,side*.10);torso.add(shoulder);
+        part(shoulder,G.shoulder,mat,0,.06,0,{s:[1.05,.9,1.05]});
+        part(shoulder,G.upperArm,M.sentinelDark,0,-.31,0);
+        const elbow=new THREE.Group();elbow.position.set(0,-.58,0);elbow.rotation.x=baseE;shoulder.add(elbow);
+        part(elbow,G.foreArm,mat,0,-.25,0);
+        part(elbow,G.fist,M.sentinelWorn,0,-.58,0,{s:[1.15,1,1.15]});
+        arms.push({shoulder,elbow,side,phase:side<0?0:Math.PI,baseS,baseE});
+      }
+      // 脚: 股関節で前後に振る。足首の回転で足裏を水平に保つ(振っても足が床へ潜らない)。
+      const legs=[];
+      for(const side of [-1,1]){
+        const hip=new THREE.Group();hip.position.set(side*.30,-.05,0);pelvis.add(hip);
+        part(hip,G.leg,M.sentinelDark,0,-.33,0);
+        const ankle=new THREE.Group();ankle.position.set(0,-.66,0);hip.add(ankle);
+        part(ankle,G.foot,mat,0,.02,-.07);
+        legs.push({hip,ankle,side,phase:side<0?0:Math.PI});
+      }
+      visualRig={golem:true,body,pelvis,torso,head,arms,legs,rune,cracks,eye,runeMat,headBase,gaitPhase:Math.random()*Math.PI*2,phase:'idle',phaseTime:0};
     }else{
       const body=new THREE.Mesh(boss?ROGUE_GEOMETRIES.bossBody:ROGUE_GEOMETRIES.body,mat); body.position.y=boss?1.65:1.0; body.scale.set(1,boss?1.35:1.12,.9); body.castShadow=true; g.add(body);
       const head=new THREE.Mesh(boss?ROGUE_GEOMETRIES.bossHead:ROGUE_GEOMETRIES.head,mat); head.position.set(0,boss?2.85:1.85,-.18); g.add(head);
@@ -2994,6 +3080,62 @@ window.startGame = function(NETINIT){
     warningMesh.rotation.x=-Math.PI/2;warningMesh.position.set(x,rogueFloorHeight(x,z)+.065,z);warningMesh.visible=false;warningMesh.renderOrder=4;sceneRef.add(warningMesh);
     return {kind,x,z,targetX:x,targetZ:z,targetYaw:0,hp,maxHp:hp,stage,boss:!!boss,optional:!!optional,rogueId,mesh:g,warningMesh,visualRig,phase:'idle',attackMode:'',aimX:x,aimZ:z,attackRadius:1.5,cooldown:1+Math.random(),dying:false,dieT:0,flash:0};
   }
+  // 石の番兵の表示アニメーション。AI・攻撃判定・同期はサーバー側で、ここは見た目だけを動かす。
+  // 動きの一覧:
+  //  待機: 呼吸・ゆっくり首を巡らせる・ルーンの脈
+  //  歩行: 重い足取り(体の上下・胴のひねり・脚と腕の逆位相の振り)。足首で足裏を水平に保つ
+  //  叩きつけ: 予備動作(両腕を頭の上へ振り上げ、胴を反らし、ルーンが強く光る) → 振り下ろし(胴を前へ倒して沈め、地面を打つ・衝撃の揺れ。足は床に付けたまま) → 腕を戻す
+  //  被弾: のけぞり
+  // 肩の回転は基準姿勢(baseS)へ加算せず毎フレーム代入する。
+  const ROGUE_GOLEM_RAISE=2.2,ROGUE_GOLEM_SLAM=.65;
+  function updateRogueGolemVisual(e,dt,rig){
+    const step=Math.max(0,Math.min(.08,dt||0));
+    if(rig.phase!==e.phase){rig.phase=e.phase;rig.phaseTime=0;}
+    rig.phaseTime+=step;
+    const pt=rig.phaseTime,t=performance.now()*.001,seed=(e.rogueId||'').length;
+    const lag=Math.hypot((e.targetX||0)-e.mesh.position.x,(e.targetZ||0)-e.mesh.position.z);
+    const moving=Math.max(0,Math.min(1,(lag-.008)*5.2));
+    rig.gaitPhase+=(dt||0)*(1.7+moving*4.4);
+    const smooth=q=>q*q*(3-2*q);
+    const base=rig.arms[0].baseS;
+    let armA=base,lean=0,drop=0,glow=0,rattle=0,raise=0;
+    if(e.phase==='windup'){
+      const r=Math.min(1,pt/.62);raise=1-(1-r)*(1-r);
+      armA=base+(ROGUE_GOLEM_RAISE-base)*raise;lean=.22*raise;drop=-.03*raise;glow=raise;
+    }else if(e.phase==='recover'){
+      if(pt<.09){const q=pt/.09,k=q*q;armA=ROGUE_GOLEM_RAISE+(ROGUE_GOLEM_SLAM-ROGUE_GOLEM_RAISE)*k;lean=.22+(-.40-.22)*k;drop=-.03+(.15+.03)*k;glow=1-.4*k;raise=1-k;}
+      else if(pt<.22){armA=ROGUE_GOLEM_SLAM;lean=-.40;drop=.15;glow=.6;}
+      else{const q=smooth(Math.min(1,(pt-.22)/.5));armA=ROGUE_GOLEM_SLAM+(base-ROGUE_GOLEM_SLAM)*q;lean=-.40*(1-q);drop=.15*(1-q);glow=.6*(1-q);}
+      if(pt>=.09)rattle=Math.exp(-(pt-.09)*12)*Math.sin(pt*70);   // 打ち下ろした直後の衝撃の揺れ
+    }
+    const impact=Math.max(0,Math.min(1,(e.flash||0)/.22));
+    const gait=Math.sin(rig.gaitPhase);
+    rig.body.position.set(rattle*.025,.01+Math.abs(gait)*.06*moving+Math.sin(t*1.8+seed)*.006-impact*.02,impact*.08);
+    rig.torso.position.y=.20-drop;   // 振り下ろしでは足を床に付けたまま、胴だけが骨盤へ沈む
+    rig.body.rotation.z=rattle*.015+impact*.03;
+    rig.pelvis.rotation.y=gait*.10*moving;
+    rig.torso.rotation.x=lean+impact*.15+Math.sin(t*1.5+seed)*.015;
+    rig.torso.rotation.y=-gait*.12*moving;
+    rig.torso.rotation.z=gait*.04*moving;
+    rig.torso.scale.y=1+Math.sin(t*1.6+seed)*.012;
+    rig.head.rotation.x=-lean*.7+impact*.12+windupHead(raise);
+    rig.head.rotation.y=Math.sin(t*.5+seed*1.3)*(.14*(1-moving)*(e.phase==='idle'?1:0)+.03)-rig.torso.rotation.y*.7;
+    for(const a of rig.arms){
+      const ph=rig.gaitPhase+a.phase;
+      a.shoulder.rotation.x=armA+Math.sin(ph+Math.PI)*.28*moving*(1-raise)+Math.sin(t*1.1+seed+a.phase)*.02+impact*.2;
+      a.shoulder.rotation.z=a.side*(.10+raise*.08);
+      a.elbow.rotation.x=a.baseE+raise*.35-(e.phase==='recover'?.1:0)-Math.max(0,Math.cos(ph))*.12*moving;
+    }
+    for(const leg of rig.legs){
+      const ph=rig.gaitPhase+leg.phase,swing=Math.sin(ph)*.38*moving;
+      leg.hip.rotation.x=swing+(e.phase==='windup'?.06*raise:0);
+      leg.ankle.rotation.x=-leg.hip.rotation.x;
+    }
+    const pulse=.9+.3*Math.sin(t*2.2+seed)+glow*1.5+impact*.6;
+    rig.runeMat.emissiveIntensity=pulse;
+    rig.rune.scale.setScalar(1+glow*.25);
+  }
+  function windupHead(raise){return raise*.22;}
   // シェイド(影の住人)の表示アニメーション。AI・攻撃判定・同期はサーバー側で、ここは見た目だけを動かす。
   // 関節の回転は基準姿勢(base*)に加算し、設計した姿勢を毎フレーム消さない。毎フレームすべての関節を代入し直すので、
   // 死亡の姿勢から復活しても元に戻る。
@@ -3005,7 +3147,9 @@ window.startGame = function(NETINIT){
   //  被弾: のけぞり(胴・頭・腕が跳ねる)と裾の煽り
   //  死亡: updateRogueShadeDeath(のけぞる → 膝をつく → 前へ突っ伏す。光が消え、裾は床にたまる)
   function updateRogueEnemyVisual(e,dt){
-    const rig=e&&e.visualRig;if(!rig||!rig.humanoid)return;
+    const rig=e&&e.visualRig;
+    if(rig&&rig.golem){updateRogueGolemVisual(e,dt,rig);return;}
+    if(!rig||!rig.humanoid)return;
     const step=Math.max(0,Math.min(.08,dt||0));
     if(rig.phase!==e.phase){
       if(e.phase==='windup')rig.swipe=1-rig.swipe;                 // 振る腕を左右交互にする
@@ -3393,7 +3537,7 @@ window.startGame = function(NETINIT){
     if(cave.isRogueDungeon){
       setActiveRogueDungeon(idx);
       const selection=roguePartySelection||{mode:'solo',code:''};
-      Net.send({t:'roguePartySelect',mode:selection.mode==='solo'?'solo':(selection.mode==='create'?'create':'join'),code:selection.code||'',dungeonType:cave.rogueVariant||'classic'});
+      Net.send({t:'roguePartySelect',mode:selection.mode==='solo'?'solo':(selection.mode==='world'?'world':(selection.mode==='create'?'create':'join')),code:selection.code||'',dungeonType:cave.rogueVariant||'classic'});
     }
     savedOutdoorPos = player.position.clone();
     savedOutdoorYaw = yaw;
@@ -10690,7 +10834,7 @@ window.startGame = function(NETINIT){
 };
 </script>
 <script src="save-format.js"></script>
-<script src="shared.js?v=70.17-shade-wraith"></script>
+<script src="shared.js?v=70.19-stone-sentinel"></script>
 <script src="boot.js"></script>
 </body>
 </html>
