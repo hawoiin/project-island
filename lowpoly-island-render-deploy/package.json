@@ -1,6 +1,6 @@
 {
   "name": "lowpoly-island-multiplayer",
-  "version": "1.70.14",
+  "version": "1.70.15",
   "description": "探索の島 — Three.js ローポリ探索ゲームのマルチプレイサーバー",
   "main": "server.js",
   "scripts": {

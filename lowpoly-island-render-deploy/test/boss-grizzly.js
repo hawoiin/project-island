@@ -148,11 +148,11 @@ check('前脚の足の裏も地面の高さに収まる(四つ足で立つ)', fr
 const hindZ = P.legs[0].position.z, frontZ = P.arms[0].position.z + 0;
 check('前脚は後ろ脚より前(+z)にあり、4本の足が体の長さいっぱいに離れている', frontZ - hindZ > 2.5, (frontZ - hindZ).toFixed(2));
 const lengthZ = Math.max(...boxes.map(b => b.z + b.d / 2)) - Math.min(...boxes.map(b => b.z - b.d / 2));
-const torsoTop = P.torso.position.y + 2.3 + 1.4; // 肩のこぶの頂点
+const torsoTop = P.torso.position.y + 2.9; // 肩の上の頂点
 const headTop = P.torso.position.y + P.head.position.y + 0.7;
 check('体は横に長い(鼻先から尻尾まで7m以上、高さの2倍以上)', lengthZ > 7 && lengthZ > 2 * torsoTop, 'length=' + lengthZ.toFixed(2) + ' hump=' + torsoTop.toFixed(2));
-check('頭は肩のこぶより低く下がっている(クマの輪郭)', headTop < torsoTop - 0.5, 'head=' + headTop.toFixed(2) + ' hump=' + torsoTop.toFixed(2));
-check('肩のこぶの高さは当たり判定の大きさ(半径1.9m)と釣り合う(2.5〜6m)', torsoTop > 2.5 && torsoTop < 6);
+check('頭は肩より低く下がっている(クマの輪郭)', headTop < torsoTop - 0.5, 'head=' + headTop.toFixed(2) + ' hump=' + torsoTop.toFixed(2));
+check('肩の高さは当たり判定の大きさ(半径1.9m)と釣り合う(2.5〜6m)', torsoTop > 2.5 && torsoTop < 6);
 const width = Math.max(...boxes.filter(b => b.w >= 1.5).map(b => b.w));
 check('体の幅は当たり判定の大きさと合っている', width / 2 <= GZ.radius && width / 2 >= GZ.radius * 0.5, 'half=' + (width / 2).toFixed(2));
 check('目と脇腹の傷だけが光る材質(glow)で、体の毛の材質は光らない', P.eyes.every(e => e.material === P.glow) && P.core.material === P.glow && P.bodyMats.every(m => m !== P.glow));
@@ -190,3 +190,4 @@ check('全員取り除ける', api.bosses.size === 0);
 
 if (fails) { console.log(fails + ' FAILED'); process.exit(1); }
 console.log('ALL PASS boss-grizzly');
+
