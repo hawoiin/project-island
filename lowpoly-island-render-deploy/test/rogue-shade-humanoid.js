@@ -3,14 +3,18 @@ const assert=require('assert');
 const fs=require('fs');
 const path=require('path');
 const html=fs.readFileSync(path.join(__dirname,'../public/index.html'),'utf8');
-// v70.7: 連続胴・頭・顎と人型リグを維持し、狼男の特徴（耳・牙・長い鼻面・獣毛色の腹）を減らす。
+// v70.17: 連続胴と人型リグ(骨盤・胴・頭、肩・肘・手首、股関節・膝・足首)を維持し、外套・裾・フードで覆う。
 assert.match(html,/function rogueRingLoftGeometry\(rings,topHex,bottomHex\)/);
 assert.doesNotMatch(html,/rogueLengthwiseLoftGeometry/);
-for(const name of ['shadeTorso','shadeSkull','shadeJaw'])assert.match(html,new RegExp(name+':rogueRingLoftGeometry'));
+for(const name of ['shadeTorso','shadeMantle','shadeRobe','shadeHood'])assert.match(html,new RegExp(name+':rogueRingLoftGeometry'));
 assert.match(html,/shadeHide:new THREE\.MeshStandardMaterial\(\{color:0xffffff,vertexColors:true/);
 assert.match(html,/const pelvis=new THREE\.Group\(\)/);
+assert.match(html,/const robe=new THREE\.Group\(\)/,'裾は骨盤に付ける(胴の前傾に引きずられない)');
+assert.match(html,/pelvis\.add\(robe\)/);
 assert.match(html,/const arms=\[\];/);
 assert.match(html,/const legs=\[\];/);
 assert.match(html,/const wrist=new THREE\.Group\(\)/);
+assert.match(html,/const jaw=new THREE\.Group\(\)/);
+assert.match(html,/visualRig=\{humanoid:true,body,pelvis,torso,head,jaw,arms,legs,[^}]*robe,cloth,core,eyes,mouth\}/);
 assert.doesNotMatch(html,/shadeBody|shadeUpperLeg|shadeMetatarsus|shadeTorso:new THREE\.BoxGeometry|shadeArmor|shadeFacePlate/);
 console.log('Rogue shade humanoid anatomy checks passed.');

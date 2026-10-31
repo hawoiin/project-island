@@ -158,6 +158,35 @@ check('体の幅は当たり判定の大きさと合っている', width / 2 <= 
 check('目と脇腹の傷だけが光る材質(glow)で、体の毛の材質は光らない', P.eyes.every(e => e.material === P.glow) && P.core.material === P.glow && P.bodyMats.every(m => m !== P.glow));
 check('大熊・守護者とは別のモデル(胴体の向きが違う: ヒグマは立ち上がらず前傾もほぼない)', model.userData.stance.lean < 0.05 && api.makeBear().userData.stance.lean >= 0.3);
 
+
+// ---- 浮いている部品がない: すべての部品が、姿勢を付けない状態で他の部品と重なっている(または接している) ----
+{
+  const parts = [];
+  (function collect(o, ox, oy, oz) {
+    for (const c of o.children) {
+      const px = ox + c.position.x, py = oy + c.position.y, pz = oz + c.position.z;
+      if (c.geometry) {
+        const a = c.geometry.args; let hx, hy, hz;
+        if (a.length === 2) { hx = hy = hz = a[0]; }                            // 球: 半径
+        else if (a.length === 3 && a[2] === 5 && a[0] < 0.5) {                  // 円錐(爪・牙): 傾きに応じて長さの向きを変える
+          const tilt = Math.abs(Math.sin(c.rotation.x));
+          hx = a[0]; hy = a[1] / 2 * (1 - tilt) + a[0] * tilt; hz = a[1] / 2 * tilt + a[0] * (1 - tilt);
+        } else { hx = a[0] / 2; hy = a[1] / 2; hz = a[2] / 2; }                // 箱
+        parts.push({ x: px, y: py, z: pz, hx, hy, hz, name: c.geometry.args.join('x') + '@' + [px, py, pz].map(v => v.toFixed(2)).join(',') });
+      }
+      collect(c, px, py, pz);
+    }
+  })(model, 0, 0, 0);
+  const tol = 0.02;
+  const touches = (p, q) => Math.abs(p.x - q.x) <= p.hx + q.hx + tol && Math.abs(p.y - q.y) <= p.hy + q.hy + tol && Math.abs(p.z - q.z) <= p.hz + q.hz + tol;
+  // 重なりの深さ(最も浅い軸)が 0.1m 未満だと、ゲーム内の頂点のゆらぎ(roughen)で離れて見えることがあるので、浅い重なりも数える
+  const depth = (p, q) => Math.min(p.hx + q.hx - Math.abs(p.x - q.x), p.hy + q.hy - Math.abs(p.y - q.y), p.hz + q.hz - Math.abs(p.z - q.z));
+  const floating = parts.filter(p => !parts.some(q => q !== p && touches(p, q)));
+  const shallow = parts.filter(p => !parts.some(q => q !== p && depth(p, q) >= 0.1));
+  check('浮いている部品がない(どの部品も他の部品と重なっている)', floating.length === 0, floating.map(p => p.name).join(' | '));
+  check('重なりが浅すぎて頂点のゆらぎで離れて見える部品がない(重なりの深さ0.1m以上)', shallow.length === 0, shallow.map(p => p.name).join(' | '));
+}
+
 // ---- 出し入れ・立ち姿・構え ----
 const info = { id: 'grizzly', x: 0, z: 0, ry: 0, hp: GZ.maxHp, maxHp: GZ.maxHp, state: 0 };
 api.addBoss(info);

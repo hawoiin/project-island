@@ -3,18 +3,20 @@ const assert=require('assert');
 const fs=require('fs');
 const path=require('path');
 const html=fs.readFileSync(path.join(__dirname,'../public/index.html'),'utf8');
-// シェイドの輪郭: 前傾した人型と長い腕は維持し、長い鼻面・獣耳・牙を外した影の住人。
+// シェイドの輪郭: ぼろの外套をまとい、フードの奥の青白い目・後ろへ流れる角・肩の結晶・胸の核で遠くから読める影の住人。
 assert.match(html,/shadeTorso:rogueRingLoftGeometry/);
-assert.match(html,/shadeSkull:rogueRingLoftGeometry/);
-assert.match(html,/shadeJaw:rogueRingLoftGeometry/);
+assert.match(html,/shadeMantle:rogueRingLoftGeometry/);
+assert.match(html,/shadeRobe:rogueRingLoftGeometry/);
+assert.match(html,/shadeHood:rogueRingLoftGeometry/);
+assert.match(html,/shadeJaw:new THREE\.OctahedronGeometry/);
 assert.match(html,/shadeUpperArm:new THREE\.CylinderGeometry/);
 assert.match(html,/shadeForearm:new THREE\.CylinderGeometry/);
 assert.match(html,/shadeLongClaw:new THREE\.ConeGeometry/);
+assert.match(html,/shadeElbowSpur:new THREE\.ConeGeometry/);
 assert.match(html,/shadeThigh:new THREE\.CylinderGeometry/);
 assert.match(html,/shadeShin:new THREE\.CylinderGeometry/);
-assert.match(html,/const jaw=new THREE\.Group\(\)/);
+assert.match(html,/shadeStrip:new THREE\.ConeGeometry/);
 assert.match(html,/const baseHip=\.45,baseKnee=-\.85/);
-assert.match(html,/shadeEye:new THREE\.MeshStandardMaterial\(\{color:0x9bdcff,emissive:0x348fc4/);
-assert.match(html,/shadeSocket:new THREE\.IcosahedronGeometry/);
+assert.match(html,/shadeEye:new THREE\.MeshStandardMaterial\(\{color:0xa8f0ff,emissive:0x3fd0ff/);
 assert.doesNotMatch(html,/shadeArmor|shadeFacePlate|shadeEyeGlow|shadeTail|shadeEar|shadeFang|shadeBrow|shadePupil/);
 console.log('Rogue shade silhouette checks passed.');
